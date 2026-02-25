@@ -13,17 +13,17 @@
       position: absolute;
       transform: translate(-50%, -50%);
       font-weight: bold;
-      text-shadow: 0px 0px 4px #000, 0px 0px 8px #000;
+      text-shadow: 0px 0px 5px #000, 0px 0px 10px #000; /* 2Dにした時に読みやすいよう影を濃く */
       white-space: nowrap;
-      transition: opacity 0.3s ease; /* ふわっと消えるアニメーション */
+      transition: opacity 0.3s ease;
     }
     .label-level-0 { font-size: 36px; color: #ffffff; z-index: 3; }
     .label-level-1 { font-size: 20px; z-index: 2; cursor: pointer; }
-    .label-level-2 { font-size: 12px; z-index: 1; }
+    .label-level-2 { font-size: 14px; z-index: 1; } /* 末端の文字を少し大きくしました */
   </style>
 </head>
 <body>
-  <div id="guide">カテゴリ(中サイズ)をクリックでフォーカス / 背景の黒い部分をクリックで全体表示に戻る</div>
+  <div id="guide">カテゴリをクリックで【2D展開】 / 背景の黒い部分をクリックで【3D宇宙】に戻る</div>
   <div id="3d-graph"></div>
   <div id="labels-container"></div>
 
@@ -48,7 +48,6 @@
     const links = [];
     const colors = ["#FF3366", "#33FF99", "#3366FF", "#FFCC33", "#FF66FF", "#33FFFF", "#FFA500", "#9966FF", "#CCFF33", "#FF4500"];
 
-    // データの構築（誰の子供かを判定できるように parentId を追加）
     dataSet.categories.forEach((cat, gIdx) => {
       const catId = `cat-${gIdx}`;
       const groupColor = colors[gIdx % colors.length];
@@ -74,7 +73,6 @@
       labelElements[node.id] = div;
     });
 
-    // ★ 選択中のカテゴリを記憶する変数
     let activeCategory = null;
 
     const Graph = ForceGraph3D()(document.getElementById('3d-graph'))
@@ -86,27 +84,49 @@
       .backgroundColor('#010101')
       .showNavInfo(false)
       
-      // ★ ノード（球体）をクリックした時の処理
+      // ★ カテゴリをクリックした時の「2D展開」処理
       .onNodeClick(node => {
-        if (node.level === 1) { // カテゴリをクリックした場合のみ
+        if (node.level === 1) {
           activeCategory = node.id;
-          updateVisibility(); // 表示の切り替えを実行
+          updateVisibility();
           
-          // クリックした場所にズーム
-          const distance = 180;
-          const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
-          Graph.cameraPosition(
-            { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
-            node, 1000
-          );
+          // 選択したカテゴリを空間の中心(0,0,0)に固定
+          node.fx = 0;
+          node.fy = 0;
+          node.fz = 0;
+
+          // 子要素(items)を取得し、完璧な2Dの円（平面）に並べる
+          const childItems = nodes.filter(n => n.parentId === activeCategory);
+          const radius = 180; // 円の大きさ（広げて文字を読みやすく）
+          const angleStep = (2 * Math.PI) / childItems.length;
+          
+          childItems.forEach((item, idx) => {
+            // 三角関数を使って円周上の座標を計算し、Z軸を0（平面）に固定
+            item.fx = radius * Math.cos(idx * angleStep);
+            item.fy = radius * Math.sin(idx * angleStep);
+            item.fz = 0; 
+          });
+
+          // カメラを真正面から見下ろす位置に移動（2D視点）
+          Graph.cameraPosition({ x: 0, y: 0, z: 450 }, { x: 0, y: 0, z: 0 }, 1000);
         }
       })
       
-      // ★ 背景（何もない黒い部分）をクリックした時の処理
+      // ★ 背景をクリックした時の「3D宇宙」復帰処理
       .onBackgroundClick(() => {
         if (activeCategory !== null) {
-          activeCategory = null; // 選択状態を解除
-          updateVisibility(); // 全体表示に戻す
+          activeCategory = null;
+          updateVisibility();
+          
+          // 固定していた座標(fx, fy, fz)を削除し、自由な浮遊状態に戻す
+          nodes.forEach(n => {
+            delete n.fx;
+            delete n.fy;
+            delete n.fz;
+          });
+          
+          // 止まっていた物理エンジンを再起動して3Dに広げる
+          Graph.d3ReheatSimulation();
           
           // カメラを初期位置に戻す
           Graph.cameraPosition({ x: 0, y: 0, z: 1000 }, { x: 0, y: 0, z: 0 }, 1000);
@@ -119,46 +139,45 @@
     });
     Graph.cameraPosition({ z: 1000 });
 
-    // ★ 表示・非表示を切り替える関数
+    // ★ 表示・非表示を切り替える関数（mainを隠す処理）
     function updateVisibility() {
-      // 球体の表示制御
       Graph.nodeVisibility(node => {
-        if (!activeCategory) return true; // 何も選択していなければ全部表示
-        // 中心(root)、選択したカテゴリ、そのカテゴリのアイテムだけを表示
-        return node.id === "root" || node.id === activeCategory || node.parentId === activeCategory;
+        if (!activeCategory) return true;
+        // main(root)は除外し、カテゴリとアイテムだけを表示
+        return node.id === activeCategory || node.parentId === activeCategory;
       });
       
-      // 線の表示制御
       Graph.linkVisibility(link => {
         if (!activeCategory) return true;
         const sourceId = link.source.id || link.source;
-        const targetId = link.target.id || link.target;
-        // 中心から選択カテゴリへの線、選択カテゴリからアイテムへの線だけを表示
-        return (sourceId === "root" && targetId === activeCategory) || (sourceId === activeCategory);
+        // カテゴリからアイテムへ向かう線だけを表示する
+        return sourceId === activeCategory;
       });
     }
 
-    // 文字ラベルの追従と表示制御
+    // 文字ラベルの表示制御
     function updateLabels() {
       nodes.forEach(node => {
         const el = labelElements[node.id];
         if (el && node.x !== undefined) {
           
-          // ★ 文字の表示・非表示判定
+          // main(root)のテキストも非表示にする判定
           let isVisible = true;
           if (activeCategory) {
-            if (node.id !== "root" && node.id !== activeCategory && node.parentId !== activeCategory) {
-              isVisible = false;
+            if (node.id === "root") {
+              isVisible = false; // mainを消す
+            } else if (node.id !== activeCategory && node.parentId !== activeCategory) {
+              isVisible = false; // 他のカテゴリを消す
             }
           }
 
           const coords = Graph.graph2ScreenCoords(node.x, node.y, node.z);
-          // カメラの裏側に行ったか、非表示対象の場合は透明にする
           if (!isVisible || coords.z < 0 || coords.z > 1) {
             el.style.opacity = 0;
             el.style.pointerEvents = 'none';
           } else {
-            el.style.opacity = node.level === 2 ? 0.8 : 1; // itemsは少し透明に
+            // 2Dモード時は文字をはっきり(1.0)見せる
+            el.style.opacity = (node.level === 2 && !activeCategory) ? 0.7 : 1;
             el.style.pointerEvents = 'auto';
             el.style.left = `${coords.x}px`;
             const yOffset = node.level === 0 ? 40 : (node.level === 1 ? 25 : 12);
