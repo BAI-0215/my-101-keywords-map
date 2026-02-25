@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Mashiro Akihito - Professional Universe</title>
+  <script src="https://unpkg.com/three"></script>
   <script src="https://unpkg.com/3d-force-graph"></script>
   <style>
     body { margin: 0; background-color: #010101; overflow: hidden; font-family: "Helvetica Neue", Arial, sans-serif; }
@@ -55,41 +56,49 @@
       .linkOpacity(0.1)
       .backgroundColor('#010101')
       .showNavInfo(false)
-      // 文字をノードの横に常に表示（Canvas方式でエラー回避）
+      // 文字をノードの横に常に表示（Canvas方式）
       .nodeThreeObject(node => {
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         const text = node.name;
+        // 階層ごとに文字サイズを変更
         const fontSize = node.level === 0 ? 32 : (node.level === 1 ? 24 : 16);
         context.font = `${fontSize}px sans-serif`;
         const textWidth = context.measureText(text).width;
 
-        canvas.width = textWidth + 10;
-        canvas.height = fontSize + 10;
+        // 余白をもたせてCanvasのサイズを決定
+        canvas.width = textWidth + 20;
+        canvas.height = fontSize + 20;
         context.font = `${fontSize}px sans-serif`;
         context.textAlign = 'center';
         context.textBaseline = 'middle';
         context.fillStyle = node.color;
-        // items(level 2) は少し透明にして主役（カテゴリ）を立てる
+        
+        // items(level 2) は少し透明にして、カテゴリを目立たせる
         if (node.level === 2) context.globalAlpha = 0.7;
         context.fillText(text, canvas.width / 2, canvas.height / 2);
 
+        // Three.jsを使って画像を3D空間に配置
         const texture = new THREE.CanvasTexture(canvas);
         const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
         const sprite = new THREE.Sprite(spriteMaterial);
         sprite.scale.set(canvas.width / 10, canvas.height / 10, 1);
+        
+        // 球体にかぶらないようにY軸（上方向）にずらす
         sprite.position.y = node.level === 0 ? 15 : (node.level === 1 ? 10 : 6);
         return sprite;
       })
-      .nodeThreeObjectExtend(true)
+      .nodeThreeObjectExtend(true) // 元の球体も表示したままにする
+      
       // クリックしたらそこにズームする機能
       .onNodeClick(node => {
+        // カメラの目標位置を計算
         const distance = 200;
         const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
         Graph.cameraPosition(
           { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
-          node, 
-          1000  // 1秒かけてズーム
+          node, // 注視点
+          1000  // 1秒かけてズームアニメーション
         );
       });
 
