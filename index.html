@@ -98,6 +98,11 @@
     let activeCategory = null;
     let activeItem = null; // ★ 3ページ目（itemsページ）用の状態管理を追加
 
+    // ★ 新規追加: 回転アニメーション用の状態管理
+    let baseAngle = 0;
+    let isCanvasNodeHovered = false; // 3D球体上のホバー状態
+    let isLabelHovered = false;      // 文字(HTML)上のホバー状態
+
     // ★ items（3ページ目）展開処理
     function focusOnItem(node) {
       if (node.level !== 2) return;
@@ -149,7 +154,7 @@
       activeCategory = node.id;
       updateVisibility();
       
-      // ★ 修正: 一旦すべてのノードの固定を解除し、座標のキャッシュによるバグを防ぐ
+      // 一旦すべてのノードの固定を解除し、座標のキャッシュによるバグを防ぐ
       nodes.forEach(n => {
         n.fx = undefined; n.fy = undefined; n.fz = undefined;
       });
@@ -157,7 +162,6 @@
       node.fx = 0;
       node.fy = 0;
       node.fz = 0;
-      // ★ 修正: 現在の座標(x,y,z)にも即座に代入し、位置を強制更新する
       node.x = 0;
       node.y = 0;
       node.z = 0;
@@ -170,7 +174,6 @@
         item.fx = radius * Math.cos(idx * angleStep);
         item.fy = radius * Math.sin(idx * angleStep);
         item.fz = 0; 
-        // ★ 修正: 現在の座標にも即座に代入
         item.x = item.fx;
         item.y = item.fy;
         item.z = item.fz;
@@ -185,6 +188,12 @@
       div.className = `node-label label-level-${node.level}`;
       div.innerText = node.name;
       
+      // ★ 新規追加: 文字上のマウスホバーで回転を停止させる
+      if (node.level === 0 || node.level === 1) {
+        div.addEventListener('mouseenter', () => isLabelHovered = true);
+        div.addEventListener('mouseleave', () => isLabelHovered = false);
+      }
+
       // カテゴリだけ色をつけ、itemsは白（CSSまたはここで指定）
       if (node.level === 1) {
         div.style.color = node.color;
@@ -222,6 +231,14 @@
       // ★ 修正4: マウスホバー時にデフォルトで表示されるツールチップ（文字）を非表示にする
       .nodeLabel(() => null)
       
+      // ★ 新規追加: アニメーションを永続化（エラーの原因であった再起動処理を排除するため）
+      .d3AlphaDecay(0)
+
+      // ★ 新規追加: 3D球体上のマウスホバーで回転を停止させる
+      .onNodeHover(node => {
+        isCanvasNodeHovered = !!node; // nodeが存在すればtrue、なければfalse
+      })
+      
       // ★ 球体をクリックした時も共通処理を呼ぶ
       .onNodeClick(node => {
         if (activeItem) return; // itemsページ展開中は無効化
@@ -246,7 +263,7 @@
       Graph.d3Force('charge').strength(0);
       Graph.d3Force('link').distance(0);
 
-      // ★ 修正: 一旦すべてのノードの固定を解除
+      // 一旦すべてのノードの固定を解除
       nodes.forEach(n => {
         n.fx = undefined; n.fy = undefined; n.fz = undefined;
       });
@@ -255,7 +272,6 @@
       mainNode.fx = 0;
       mainNode.fy = 0;
       mainNode.fz = 0;
-      // ★ 修正: 現在の座標(x,y,z)にも即座に代入し、位置を強制更新
       mainNode.x = 0;
       mainNode.y = 0;
       mainNode.z = 0;
@@ -265,10 +281,11 @@
       const angleStep = (2 * Math.PI) / categoryNodes.length;
 
       categoryNodes.forEach((node, idx) => {
-        node.fx = radius * Math.cos(idx * angleStep);
-        node.fy = radius * Math.sin(idx * angleStep);
+        // 固定された角度ではなく、現在回転している baseAngle を利用して配置する
+        const currentAngle = baseAngle + idx * angleStep; 
+        node.fx = radius * Math.cos(currentAngle);
+        node.fy = radius * Math.sin(currentAngle);
         node.fz = 0;
-        // ★ 修正: 現在の座標にも即座に代入
         node.x = node.fx;
         node.y = node.fy;
         node.z = node.fz;
@@ -298,6 +315,23 @@
 
     // 文字ラベルの追従処理
     function updateLabels() {
+      // mainページで、マウスが乗っていない時だけ全体を時計回りに回転させる処理
+      if (activeCategory === null && !activeItem && !isCanvasNodeHovered && !isLabelHovered) {
+        baseAngle -= 0.0015; // マイナス値で時計回り。数値を大きくすると速くなります
+        
+        const categoryNodes = nodes.filter(n => n.level === 1);
+        const radius = 300;
+        const angleStep = (2 * Math.PI) / categoryNodes.length;
+
+        categoryNodes.forEach((node, idx) => {
+          const currentAngle = baseAngle + idx * angleStep;
+          node.fx = radius * Math.cos(currentAngle);
+          node.fy = radius * Math.sin(currentAngle);
+          // .d3AlphaDecay(0) によってエンジンが稼働し続けているため、
+          // fx, fy を変更するだけで自動的に球体が移動します。
+        });
+      }
+
       nodes.forEach(node => {
         const el = labelElements[node.id];
         if (el && node.x !== undefined) {
