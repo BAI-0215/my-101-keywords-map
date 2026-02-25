@@ -2,16 +2,29 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Mashiro Akihito - 3D Universe (Safe Mode)</title>
+  <title>Mashiro Akihito - 3D Universe</title>
   <script src="https://unpkg.com/3d-force-graph"></script>
   <style>
-    body { margin: 0; background-color: #010101; overflow: hidden; color: white; font-family: sans-serif; }
-    #info { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 14px; opacity: 0.8; pointer-events: none; }
+    body { margin: 0; background-color: #010101; overflow: hidden; font-family: sans-serif; }
+    #info { position: absolute; top: 10px; left: 10px; z-index: 20; color: white; opacity: 0.8; font-size: 12px; pointer-events: none; }
+    
+    /* 3D空間の手前に重ねる文字のスタイル */
+    #labels-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+    .node-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      font-weight: bold;
+      text-shadow: 0px 0px 5px #000, 0px 0px 8px #000; /* 黒のフチドリで読みやすく */
+      transition: opacity 0.1s;
+    }
+    .label-main { font-size: 24px; color: #ffffff; }
+    .label-cat { font-size: 14px; }
   </style>
 </head>
 <body>
-  <div id="info">Mashiro Akihito 101 Keywords<br>※マウスを乗せると名前が表示されます</div>
+  <div id="info">Drag to move & fix | 101 Keywords</div>
   <div id="3d-graph"></div>
+  <div id="labels-container"></div>
 
   <script>
     const dataSet = {
@@ -30,33 +43,91 @@
       ]
     };
 
-    const nodes = [{ id: "root", name: dataSet.main, val: 150, color: "#ffffff" }];
+    const nodes = [];
     const links = [];
     const colors = ["#ff5f5f", "#5fff5f", "#5f5fff", "#ffff5f", "#ff5fff", "#5fffff", "#ffaf5f", "#af5fff", "#5fffaf", "#ff5faf"];
 
+    // 1. mainノード（サイズ特大）
+    nodes.push({ id: "root", name: dataSet.main, val: 200, level: 0, color: "#ffffff" });
+
+    // 2. カテゴリーとアイテムの追加
     dataSet.categories.forEach((cat, gIdx) => {
       const catId = `cat-${gIdx}`;
       const groupColor = colors[gIdx % colors.length];
-      nodes.push({ id: catId, name: cat.name, val: 50, color: groupColor });
+      
+      // カテゴリーノード（サイズ大）
+      nodes.push({ id: catId, name: cat.name, val: 80, level: 1, color: groupColor });
       links.push({ source: "root", target: catId });
 
+      // アイテムノード（サイズ小）
       cat.items.forEach((item, iIdx) => {
         const itemId = `item-${gIdx}-${iIdx}`;
-        nodes.push({ id: itemId, name: item, val: 10, color: groupColor });
+        nodes.push({ id: itemId, name: item, val: 15, level: 2, color: groupColor });
         links.push({ source: catId, target: itemId });
       });
     });
 
+    // --- HTMLラベルの準備 ---
+    const labelsContainer = document.getElementById('labels-container');
+    const labelElements = {};
+
+    nodes.forEach(node => {
+      // main(0)とカテゴリー(1)の時だけHTMLのdivタグを作成
+      if (node.level < 2) {
+        const div = document.createElement('div');
+        div.className = `node-label ${node.level === 0 ? 'label-main' : 'label-cat'}`;
+        div.innerText = node.name;
+        if (node.level === 1) div.style.color = node.color; // カテゴリはノードと同色
+        labelsContainer.appendChild(div);
+        labelElements[node.id] = div;
+      }
+    });
+
+    // --- グラフの描画 ---
     const Graph = ForceGraph3D()(document.getElementById('3d-graph'))
       .graphData({ nodes, links })
-      .nodeLabel('name') // ホバーした時だけ名前を表示する安全な機能
       .nodeVal('val')
-      .nodeColor('color')
+      .nodeColor(node => node.level === 2 ? `${node.color}55` : node.color) // 末端は少し透明に
+      .nodeLabel(node => node.level === 2 ? node.name : '') // 末端ノードのみホバーで名前表示
       .backgroundColor('#010101')
       .linkOpacity(0.3)
-      .linkWidth(0.5);
+      .linkWidth(0.5)
+      // ドラッグ終了時にその座標(fx, fy, fz)を固定する設定
+      .onNodeDragEnd(node => {
+        node.fx = node.x;
+        node.fy = node.y;
+        node.fz = node.z;
+      });
 
-    Graph.d3Force('charge').strength(-300);
+    // 広がり方の設定
+    Graph.d3Force('charge').strength(-350);
+    Graph.cameraPosition({ z: 600 });
+
+    // --- ラベルを3D空間の動きに追従させる処理 ---
+    function updateLabels() {
+      nodes.forEach(node => {
+        if (node.level < 2 && labelElements[node.id] && node.x !== undefined) {
+          // 3Dの座標を、画面上の2DのX・Y座標に変換
+          const coords = Graph.graph2ScreenCoords(node.x, node.y, node.z);
+          const el = labelElements[node.id];
+          
+          // カメラの裏側に回った時は文字を消す（めり込み防止）
+          if (coords.z < 0 || coords.z > 1) {
+            el.style.opacity = 0;
+          } else {
+            el.style.opacity = 1;
+            el.style.left = `${coords.x}px`;
+            // 球体の少し上に文字が来るようにY座標を調整
+            const yOffset = node.level === 0 ? 40 : 25;
+            el.style.top = `${coords.y - yOffset}px`;
+          }
+        }
+      });
+      requestAnimationFrame(updateLabels); // 毎フレーム更新
+    }
+    
+    // 追従処理スタート
+    requestAnimationFrame(updateLabels);
   </script>
 </body>
 </html>
