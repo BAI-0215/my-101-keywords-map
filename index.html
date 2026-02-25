@@ -10,31 +10,34 @@
     
     #labels-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
     
-    /* ★ 文字の基本設定（アニメーションの滑らかさを追加） */
     .node-label {
       position: absolute;
-      transform: translate(-50%, -50%) scale(1); /* 基本のサイズ */
+      transform: translate(-50%, -50%) scale(1);
       font-weight: bold;
       text-shadow: 0px 0px 5px #000, 0px 0px 10px #000;
       white-space: nowrap;
-      transition: opacity 0.3s ease, transform 0.2s ease; /* transform（拡大）を0.2秒で滑らかに動かす */
+      transition: opacity 0.3s ease, transform 0.2s ease, color 0.2s ease;
     }
     
-    .label-level-0 { font-size: 36px; color: #ffffff; z-index: 3; }
+    /* メインの文字をさらに大きく */
+    .label-level-0 { font-size: 42px; color: #ffffff; z-index: 3; }
     
-    /* カテゴリ（name）の設定 */
     .label-level-1 { font-size: 20px; z-index: 2; cursor: pointer; pointer-events: auto; }
-    /* ★ カテゴリにホバーした時も少し(1.2倍)拡大する */
-    .label-level-1:hover { transform: translate(-50%, -50%) scale(1.2); z-index: 20; }
+    .label-level-1:hover { transform: translate(-50%, -50%) scale(1.2); }
     
-    /* アイテム（items）の設定 */
     .label-level-2 { font-size: 14px; z-index: 1; color: #ffffff; cursor: pointer; pointer-events: auto; }
-    /* ★ アイテムにホバーした時に大きく(1.6倍)拡大する */
-    .label-level-2:hover { transform: translate(-50%, -50%) scale(1.6); z-index: 20; color: #ffffaa !important; /* 少し黄色っぽく光らせる */ }
+    .label-level-2:hover { transform: translate(-50%, -50%) scale(1.6); color: #ffffaa !important; }
+
+    /* ★ アイテム単体ページになった時の専用スタイル */
+    .focused-item {
+      transform: translate(-50%, -50%) scale(2.5) !important; /* 2.5倍の巨大文字に */
+      color: #ffffff !important;
+      text-shadow: 0px 0px 20px rgba(255, 255, 255, 0.5), 0px 0px 10px #000;
+    }
   </style>
 </head>
 <body>
-  <div id="guide">カテゴリをクリックで【詳細展開】 / 背景をクリックで【全体表示】に戻る</div>
+  <div id="guide">文字/球体クリックで【深掘り】 / 背景クリックで【1つ戻る】</div>
   <div id="3d-graph"></div>
   <div id="labels-container"></div>
 
@@ -55,7 +58,8 @@
       ]
     };
 
-    const nodes = [{ id: "root", name: dataSet.main, val: 120, level: 0, color: "#ffffff" }];
+    // ★ メイン(root)のvalを120→350に巨大化
+    const nodes = [{ id: "root", name: dataSet.main, val: 350, level: 0, color: "#ffffff" }];
     const links = [];
     const colors = ["#FF3366", "#33FF99", "#3366FF", "#FFCC33", "#FF66FF", "#33FFFF", "#FFA500", "#9966FF", "#CCFF33", "#FF4500"];
 
@@ -67,24 +71,32 @@
 
       cat.items.forEach((item, iIdx) => {
         const itemId = `item-${gIdx}-${iIdx}`;
-        nodes.push({ id: itemId, name: item, val: 15, level: 2, color: groupColor, parentId: catId });
+        // itemsの球体も少し大きく（15→20）
+        nodes.push({ id: itemId, name: item, val: 20, level: 2, color: groupColor, parentId: catId });
         links.push({ source: catId, target: itemId });
       });
     });
 
     const labelsContainer = document.getElementById('labels-container');
     const labelElements = {};
-    let activeCategory = null;
+    
+    // ★ 状態管理
+    let activeCategory = null; // 選択中のカテゴリ
+    let activeItem = null;     // 選択中のアイテム単体
 
+    // --- 各種展開アクション ---
+
+    // 1. カテゴリを選択した時（2D展開）
     function focusOnCategory(node) {
       if (node.level !== 1) return;
       activeCategory = node.id;
+      activeItem = null; // アイテム選択をリセット
       updateVisibility();
       
-      node.fx = 0;
-      node.fy = 0;
-      node.fz = 0;
+      // カテゴリを真ん中に
+      node.fx = 0; node.fy = 0; node.fz = 0;
 
+      // itemsを円状に並べる
       const childItems = nodes.filter(n => n.parentId === activeCategory);
       const radius = 180;
       const angleStep = (2 * Math.PI) / childItems.length;
@@ -98,6 +110,20 @@
       Graph.cameraPosition({ x: 0, y: 0, z: 450 }, { x: 0, y: 0, z: 0 }, 1000);
     }
 
+    // 2. アイテムを選択した時（単体フォーカス）
+    function focusOnItem(node) {
+      if (node.level !== 2) return;
+      activeItem = node.id;
+      updateVisibility();
+
+      // 選んだアイテムを真ん中に固定
+      node.fx = 0; node.fy = 0; node.fz = 0;
+
+      // カメラをグッと近づける
+      Graph.cameraPosition({ x: 0, y: 0, z: 150 }, { x: 0, y: 0, z: 0 }, 1000);
+    }
+
+    // --- HTMLラベルの生成とクリック処理 ---
     nodes.forEach(node => {
       const div = document.createElement('div');
       div.className = `node-label label-level-${node.level}`;
@@ -105,18 +131,18 @@
       
       if (node.level === 1) {
         div.style.color = node.color;
-        div.addEventListener('click', (e) => {
-          e.stopPropagation(); 
-          focusOnCategory(node);
-        });
+        div.addEventListener('click', (e) => { e.stopPropagation(); focusOnCategory(node); });
       } else if (node.level === 2) {
         div.style.color = "#ffffff"; 
+        // ★ itemsのクリックイベントを追加
+        div.addEventListener('click', (e) => { e.stopPropagation(); focusOnItem(node); });
       }
       
       labelsContainer.appendChild(div);
       labelElements[node.id] = div;
     });
 
+    // --- 3Dグラフの設定 ---
     const Graph = ForceGraph3D()(document.getElementById('3d-graph'))
       .graphData({ nodes, links })
       .nodeColor('color')
@@ -127,11 +153,26 @@
       .showNavInfo(false)
       
       .onNodeClick(node => {
-        focusOnCategory(node);
+        if (node.level === 1) focusOnCategory(node);
+        if (node.level === 2) focusOnItem(node);
       })
       
+      // ★ 背景クリック（戻る処理）
       .onBackgroundClick(() => {
-        if (activeCategory !== null) {
+        if (activeItem !== null) {
+          // アイテム単体 → カテゴリ2D展開 へ1つ戻る
+          const currentItemNode = nodes.find(n => n.id === activeItem);
+          delete currentItemNode.fx; delete currentItemNode.fy; delete currentItemNode.fz;
+          
+          activeItem = null;
+          updateVisibility();
+          
+          // 円状のレイアウトを再適用
+          const categoryNode = nodes.find(n => n.id === activeCategory);
+          focusOnCategory(categoryNode);
+          
+        } else if (activeCategory !== null) {
+          // カテゴリ2D展開 → 初期宇宙 へ戻る
           activeCategory = null;
           updateVisibility();
           setInitialLayout();
@@ -139,17 +180,16 @@
         }
       });
 
+    // --- 初期レイアウト設定 ---
     function setInitialLayout() {
       Graph.d3Force('charge').strength(0);
       Graph.d3Force('link').distance(0);
 
       const mainNode = nodes.find(n => n.id === "root");
-      mainNode.fx = 0;
-      mainNode.fy = 0;
-      mainNode.fz = 0;
+      mainNode.fx = 0; mainNode.fy = 0; mainNode.fz = 0;
 
       const categoryNodes = nodes.filter(n => n.level === 1);
-      const radius = 300; 
+      const radius = 350; // 中心が大きくなったので軌道も少し広げる
       const angleStep = (2 * Math.PI) / categoryNodes.length;
 
       categoryNodes.forEach((node, idx) => {
@@ -163,13 +203,16 @@
     updateVisibility();
     Graph.cameraPosition({ z: 1000 });
 
+    // --- 表示・非表示のロジック ---
     function updateVisibility() {
       Graph.nodeVisibility(node => {
-        if (!activeCategory) return node.level < 2; 
-        return node.id === activeCategory || node.parentId === activeCategory;
+        if (activeItem) return node.id === activeItem; // ★ アイテム単体モード
+        if (!activeCategory) return node.level < 2; // 初期モード
+        return node.id === activeCategory || node.parentId === activeCategory; // カテゴリモード
       });
       
       Graph.linkVisibility(link => {
+        if (activeItem) return false; // ★ アイテム単体時は線なし
         if (!activeCategory) {
           const targetId = link.target.id || link.target;
           return nodes.find(n => n.id === targetId)?.level === 1;
@@ -179,13 +222,16 @@
       });
     }
 
+    // --- 文字の追従・エフェクト処理 ---
     function updateLabels() {
       nodes.forEach(node => {
         const el = labelElements[node.id];
         if (el && node.x !== undefined) {
           
           let isVisible = true;
-          if (!activeCategory) {
+          if (activeItem) {
+            isVisible = (node.id === activeItem); // ★ アイテム単体モードの表示判定
+          } else if (!activeCategory) {
              if(node.level === 2) isVisible = false;
           } else {
             if (node.id === "root") {
@@ -198,14 +244,24 @@
           const coords = Graph.graph2ScreenCoords(node.x, node.y, node.z);
           if (!isVisible || coords.z < 0 || coords.z > 1) {
             el.style.opacity = 0;
-            // 非表示の時はクリック判定を消す
             el.style.pointerEvents = 'none';
+            el.classList.remove('focused-item');
           } else {
-            // 表示されている時はクリック判定を有効化
             el.style.opacity = 1; 
             el.style.pointerEvents = 'auto'; 
             el.style.left = `${coords.x}px`;
-            const yOffset = node.level === 0 ? 40 : (node.level === 1 ? 25 : 12);
+            
+            // ★ クラスの付け外しによる文字の巨大化と、Y軸の微調整
+            let yOffset = 0;
+            if (activeItem && node.id === activeItem) {
+              el.classList.add('focused-item');
+              yOffset = 30; // 巨大化した時の位置調整
+            } else {
+              el.classList.remove('focused-item');
+              // 中心球体が巨大になったため、レベル0の文字を上に押し上げる
+              yOffset = node.level === 0 ? 65 : (node.level === 1 ? 25 : 12);
+            }
+            
             el.style.top = `${coords.y - yOffset}px`;
           }
         }
