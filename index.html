@@ -3,16 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <title>Mashiro Akihito - Professional Universe</title>
-  <script src="https://unpkg.com/three"></script>
   <script src="https://unpkg.com/3d-force-graph"></script>
   <style>
     body { margin: 0; background-color: #010101; overflow: hidden; font-family: "Helvetica Neue", Arial, sans-serif; }
-    #guide { position: absolute; bottom: 20px; width: 100%; text-align: center; color: rgba(255,255,255,0.5); pointer-events: none; font-size: 12px; }
+    #guide { position: absolute; bottom: 20px; width: 100%; text-align: center; color: rgba(255,255,255,0.5); pointer-events: none; font-size: 12px; z-index: 30; }
+    
+    /* 確実に表示されるHTMLテキストのスタイル */
+    #labels-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+    .node-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      font-weight: bold;
+      text-shadow: 0px 0px 4px #000, 0px 0px 8px #000; /* 文字を読みやすくする黒フチ */
+      white-space: nowrap;
+    }
+    /* 階層ごとの文字サイズと透明度 */
+    .label-level-0 { font-size: 36px; color: #ffffff; z-index: 3; }
+    .label-level-1 { font-size: 20px; z-index: 2; }
+    .label-level-2 { font-size: 12px; opacity: 0.7; z-index: 1; }
   </style>
 </head>
 <body>
   <div id="guide">左クリックで回転 / 右クリックで並行移動 / ホイールでズーム / 球体クリックでフォーカス</div>
   <div id="3d-graph"></div>
+  <div id="labels-container"></div>
 
   <script>
     const dataSet = {
@@ -35,6 +49,7 @@
     const links = [];
     const colors = ["#FF3366", "#33FF99", "#3366FF", "#FFCC33", "#FF66FF", "#33FFFF", "#FFA500", "#9966FF", "#CCFF33", "#FF4500"];
 
+    // データからノードとリンクを作成
     dataSet.categories.forEach((cat, gIdx) => {
       const catId = `cat-${gIdx}`;
       const groupColor = colors[gIdx % colors.length];
@@ -48,67 +63,69 @@
       });
     });
 
+    // --- HTMLテキストの生成（全101個） ---
+    const labelsContainer = document.getElementById('labels-container');
+    const labelElements = {};
+
+    nodes.forEach(node => {
+      const div = document.createElement('div');
+      div.className = `node-label label-level-${node.level}`;
+      div.innerText = node.name;
+      if (node.level > 0) div.style.color = node.color; // カテゴリとアイテムに色をつける
+      labelsContainer.appendChild(div);
+      labelElements[node.id] = div;
+    });
+
+    // --- 3Dグラフの描画 ---
     const Graph = ForceGraph3D()(document.getElementById('3d-graph'))
       .graphData({ nodes, links })
       .nodeColor('color')
       .nodeVal('val')
-      .nodeOpacity(1)
-      .linkOpacity(0.1)
+      .nodeOpacity(0.9)
+      .linkOpacity(0.15)
       .backgroundColor('#010101')
       .showNavInfo(false)
-      // 文字をノードの横に常に表示（Canvas方式）
-      .nodeThreeObject(node => {
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        const text = node.name;
-        // 階層ごとに文字サイズを変更
-        const fontSize = node.level === 0 ? 32 : (node.level === 1 ? 24 : 16);
-        context.font = `${fontSize}px sans-serif`;
-        const textWidth = context.measureText(text).width;
-
-        // 余白をもたせてCanvasのサイズを決定
-        canvas.width = textWidth + 20;
-        canvas.height = fontSize + 20;
-        context.font = `${fontSize}px sans-serif`;
-        context.textAlign = 'center';
-        context.textBaseline = 'middle';
-        context.fillStyle = node.color;
-        
-        // items(level 2) は少し透明にして、カテゴリを目立たせる
-        if (node.level === 2) context.globalAlpha = 0.7;
-        context.fillText(text, canvas.width / 2, canvas.height / 2);
-
-        // Three.jsを使って画像を3D空間に配置
-        const texture = new THREE.CanvasTexture(canvas);
-        const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
-        const sprite = new THREE.Sprite(spriteMaterial);
-        sprite.scale.set(canvas.width / 10, canvas.height / 10, 1);
-        
-        // 球体にかぶらないようにY軸（上方向）にずらす
-        sprite.position.y = node.level === 0 ? 15 : (node.level === 1 ? 10 : 6);
-        return sprite;
-      })
-      .nodeThreeObjectExtend(true) // 元の球体も表示したままにする
-      
-      // クリックしたらそこにズームする機能
+      // クリックズーム機能
       .onNodeClick(node => {
-        // カメラの目標位置を計算
         const distance = 200;
         const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
         Graph.cameraPosition(
           { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
-          node, // 注視点
-          1000  // 1秒かけてズームアニメーション
+          node, 1000
         );
       });
 
-    // --- 物理エンジンの調整（並びを綺麗にする） ---
-    Graph.d3Force('charge').strength(-400); // 反発を強めて重なりを防ぐ
-    Graph.d3Force('link').distance(node => node.level === 0 ? 150 : 60); // 中心とカテゴリの距離を離す
+    // 距離の調整（中心は遠く、カテゴリの周りは近くに配置）
+    Graph.d3Force('charge').strength(-400);
+    Graph.d3Force('link').distance(link => {
+      // link.sourceがroot(中心)の場合は距離を150、それ以外(カテゴリ→アイテム)は60
+      return link.source.id === "root" || link.source === "root" ? 150 : 60;
+    });
+    
+    // 初期カメラ位置
+    Graph.cameraPosition({ z: 1000 });
 
-    // 全キーワードを表示するため、少し引きの絵から開始
-    Graph.cameraPosition({ z: 900 });
-
+    // --- 文字を球体に追従させる処理 ---
+    function updateLabels() {
+      nodes.forEach(node => {
+        const el = labelElements[node.id];
+        if (el && node.x !== undefined) {
+          const coords = Graph.graph2ScreenCoords(node.x, node.y, node.z);
+          // カメラの裏に回ったら文字を隠す
+          if (coords.z < 0 || coords.z > 1) {
+            el.style.display = 'none';
+          } else {
+            el.style.display = 'block';
+            el.style.left = `${coords.x}px`;
+            // 球体のサイズに合わせて文字を上にずらす
+            const yOffset = node.level === 0 ? 40 : (node.level === 1 ? 25 : 12);
+            el.style.top = `${coords.y - yOffset}px`;
+          }
+        }
+      });
+      requestAnimationFrame(updateLabels);
+    }
+    requestAnimationFrame(updateLabels);
   </script>
 </body>
 </html>
