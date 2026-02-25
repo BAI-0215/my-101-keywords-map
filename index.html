@@ -149,9 +149,18 @@
       activeCategory = node.id;
       updateVisibility();
       
+      // ★ 修正: 一旦すべてのノードの固定を解除し、座標のキャッシュによるバグを防ぐ
+      nodes.forEach(n => {
+        n.fx = undefined; n.fy = undefined; n.fz = undefined;
+      });
+
       node.fx = 0;
       node.fy = 0;
       node.fz = 0;
+      // ★ 修正: 現在の座標(x,y,z)にも即座に代入し、位置を強制更新する
+      node.x = 0;
+      node.y = 0;
+      node.z = 0;
 
       const childItems = nodes.filter(n => n.parentId === activeCategory);
       const radius = 180;
@@ -161,6 +170,10 @@
         item.fx = radius * Math.cos(idx * angleStep);
         item.fy = radius * Math.sin(idx * angleStep);
         item.fz = 0; 
+        // ★ 修正: 現在の座標にも即座に代入
+        item.x = item.fx;
+        item.y = item.fy;
+        item.z = item.fz;
       });
 
       Graph.cameraPosition({ x: 0, y: 0, z: 450 }, { x: 0, y: 0, z: 0 }, 1000);
@@ -233,10 +246,19 @@
       Graph.d3Force('charge').strength(0);
       Graph.d3Force('link').distance(0);
 
+      // ★ 修正: 一旦すべてのノードの固定を解除
+      nodes.forEach(n => {
+        n.fx = undefined; n.fy = undefined; n.fz = undefined;
+      });
+
       const mainNode = nodes.find(n => n.id === "root");
       mainNode.fx = 0;
       mainNode.fy = 0;
       mainNode.fz = 0;
+      // ★ 修正: 現在の座標(x,y,z)にも即座に代入し、位置を強制更新
+      mainNode.x = 0;
+      mainNode.y = 0;
+      mainNode.z = 0;
 
       const categoryNodes = nodes.filter(n => n.level === 1);
       const radius = 300; 
@@ -246,6 +268,10 @@
         node.fx = radius * Math.cos(idx * angleStep);
         node.fy = radius * Math.sin(idx * angleStep);
         node.fz = 0;
+        // ★ 修正: 現在の座標にも即座に代入
+        node.x = node.fx;
+        node.y = node.fy;
+        node.z = node.fz;
       });
     }
 
