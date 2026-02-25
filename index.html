@@ -6,73 +6,26 @@
   <script src="https://unpkg.com/3d-force-graph"></script>
   <style>
     body { margin: 0; background-color: #010101; overflow: hidden; font-family: "Helvetica Neue", Arial, sans-serif; }
+    #guide { position: absolute; bottom: 20px; width: 100%; text-align: center; color: rgba(255,255,255,0.7); pointer-events: none; font-size: 14px; z-index: 30; font-weight: bold; }
     
-    /* ガイドを左上に配置 */
-    #guide {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      text-align: left;
-      color: rgba(255,255,255,0.7);
-      pointer-events: none;
-      font-size: 14px;
-      z-index: 30;
-      font-weight: bold;
-      line-height: 1.6;
-    }
-
-    /* ★ 完璧な全画面背景（黒い隙間を絶対に作らない） */
-    #fullscreen-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: 5; 
-      background-color: transparent;
-      clip-path: circle(0% at 50% 50%); /* 画面中央から円が広がる */
-      transition: clip-path 0.7s cubic-bezier(0.25, 1, 0.5, 1), background-color 0s;
-      pointer-events: none;
-    }
-    #fullscreen-overlay.active {
-      clip-path: circle(150% at 50% 50%); /* 画面の四隅まで完全に覆い尽くす */
-      pointer-events: auto; 
-    }
-
     #labels-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
-    
     .node-label {
       position: absolute;
-      transform: translate(-50%, -50%) scale(1);
+      transform: translate(-50%, -50%);
       font-weight: bold;
-      text-shadow: 0px 0px 6px #000, 0px 0px 12px #000;
+      text-shadow: 0px 0px 5px #000, 0px 0px 10px #000;
       white-space: nowrap;
-      transition: opacity 0.3s ease, transform 0.3s ease;
-      pointer-events: auto;
-      cursor: pointer;
+      transition: opacity 0.3s ease;
     }
-    
-    /* 文字サイズの最適化 */
-    .label-level-0 { font-size: 36px; color: #ffffff; z-index: 3; } /* 大きすぎないように調整 */
-    .label-level-1 { font-size: 24px; z-index: 2; } 
-    .label-level-1:hover { transform: translate(-50%, -50%) scale(1.2); }
-    .label-level-2 { font-size: 16px; z-index: 1; color: #ffffff; } 
-    .label-level-2:hover { transform: translate(-50%, -50%) scale(1.5); color: #ffffaa !important; }
-
-    /* ★ アイテム単体時の文字（絶対に画面のど真ん中に固定し、巨大化） */
-    .focused-item {
-      transform: translate(-50%, -50%) scale(4) !important; /* 4倍に巨大化 */
-      color: #ffffff !important;
-      text-shadow: 0px 0px 20px rgba(0, 0, 0, 0.5);
-      z-index: 100;
-      top: 50% !important;  /* 3D座標を無視して画面中央に固定 */
-      left: 50% !important; /* 3D座標を無視して画面中央に固定 */
-    }
+    .label-level-0 { font-size: 36px; color: #ffffff; z-index: 3; }
+    /* カテゴリの文字にカーソルを合わせるとポインターになるように設定 */
+    .label-level-1 { font-size: 20px; z-index: 2; cursor: pointer; } 
+    /* itemsの文字色を白に指定 */
+    .label-level-2 { font-size: 14px; z-index: 1; color: #ffffff; } 
   </style>
 </head>
 <body>
-  <div id="guide">文字/球体クリックで【深掘り】<br>背景クリックで【1つ戻る】</div>
-  <div id="fullscreen-overlay"></div>
+  <div id="guide">カテゴリ（球体または文字）をクリックで【詳細展開】 / 背景の黒い部分をクリックで【全体表示】に戻る</div>
   <div id="3d-graph"></div>
   <div id="labels-container"></div>
 
@@ -93,164 +46,129 @@
       ]
     };
 
-    const nodes = [{ id: "root", name: dataSet.main, val: 300, level: 0, color: "#ffffff" }];
+    const nodes = [{ id: "root", name: dataSet.main, val: 120, level: 0, color: "#ffffff" }];
     const links = [];
     const colors = ["#FF3366", "#33FF99", "#3366FF", "#FFCC33", "#FF66FF", "#33FFFF", "#FFA500", "#9966FF", "#CCFF33", "#FF4500"];
 
     dataSet.categories.forEach((cat, gIdx) => {
       const catId = `cat-${gIdx}`;
       const groupColor = colors[gIdx % colors.length];
-      nodes.push({ id: catId, name: cat.name, val: 80, level: 1, color: groupColor, parentId: "root" });
+      nodes.push({ id: catId, name: cat.name, val: 60, level: 1, color: groupColor, parentId: "root" });
       links.push({ source: "root", target: catId });
 
       cat.items.forEach((item, iIdx) => {
         const itemId = `item-${gIdx}-${iIdx}`;
-        nodes.push({ id: itemId, name: item, val: 30, level: 2, color: groupColor, parentId: catId });
+        nodes.push({ id: itemId, name: item, val: 15, level: 2, color: groupColor, parentId: catId });
         links.push({ source: catId, target: itemId });
       });
     });
 
     const labelsContainer = document.getElementById('labels-container');
-    const overlay = document.getElementById('fullscreen-overlay');
     const labelElements = {};
-    
-    let activeCategory = null; 
-    let activeItem = null;     
+    let activeCategory = null;
 
-    // ★ 座標を「強制的に」割り当てる関数（重なりを絶対に防ぐ）
-    function applyCircleLayout(centerNodeId, orbitingNodes, radius) {
-      const centerNode = nodes.find(n => n.id === centerNodeId);
-      centerNode.fx = 0; centerNode.fy = 0; centerNode.fz = 0;
-      centerNode.x = 0;  centerNode.y = 0;  centerNode.z = 0; // x,y,zも直接上書きして瞬間移動させる
-
-      const angleStep = (2 * Math.PI) / orbitingNodes.length;
-      orbitingNodes.forEach((node, idx) => {
-        const nx = radius * Math.cos(idx * angleStep);
-        const ny = radius * Math.sin(idx * angleStep);
-        node.fx = nx; node.fy = ny; node.fz = 0;
-        node.x = nx;  node.y = ny;  node.z = 0; // x,y,zも直接上書きして瞬間移動させる
-      });
-    }
-
-    // 1. カテゴリ展開（詳細画面）
+    // ★ 共通のカテゴリ展開処理（球体クリックでも文字クリックでもここを呼び出す）
     function focusOnCategory(node) {
-      if (node.level !== 1 || activeItem) return;
+      if (node.level !== 1) return;
+      
       activeCategory = node.id;
+      updateVisibility();
       
+      node.fx = 0;
+      node.fy = 0;
+      node.fz = 0;
+
       const childItems = nodes.filter(n => n.parentId === activeCategory);
-      // 半径を600と大きく取り、アイテム同士の重なりを防止
-      applyCircleLayout(activeCategory, childItems, 600); 
+      const radius = 180;
+      const angleStep = (2 * Math.PI) / childItems.length;
       
-      updateVisibility();
-      Graph.centerAt(0, 0, 0, 0); // 視点を瞬時にリセット
-      Graph.cameraPosition({ x: 0, y: 0, z: 2400 }, { x: 0, y: 0, z: 0 }, 1000); // カメラを適切に離す
+      childItems.forEach((item, idx) => {
+        item.fx = radius * Math.cos(idx * angleStep);
+        item.fy = radius * Math.sin(idx * angleStep);
+        item.fz = 0; 
+      });
+
+      Graph.cameraPosition({ x: 0, y: 0, z: 450 }, { x: 0, y: 0, z: 0 }, 1000);
     }
 
-    // 2. アイテム単体展開（全画面）
-    function focusOnItem(node) {
-      if (node.level !== 2) return;
-      activeItem = node.id;
-      updateVisibility();
-
-      Graph.centerAt(0, 0, 0, 0);
-
-      // ★ 背景色をアイテムの色にして、円形に広げるアニメーション
-      overlay.style.backgroundColor = node.color; 
-      overlay.classList.add('active'); 
-    }
-
-    // 3. アイテム単体から戻る
-    function goBackFromItem() {
-      activeItem = null;
-      updateVisibility();
-
-      overlay.classList.remove('active');
-
-      const categoryNode = nodes.find(n => n.id === activeCategory);
-      focusOnCategory(categoryNode);
-    }
-
-    // HTMLラベル生成
+    // テキスト要素の生成
     nodes.forEach(node => {
       const div = document.createElement('div');
       div.className = `node-label label-level-${node.level}`;
       div.innerText = node.name;
       
+      // カテゴリだけ色をつけ、itemsは白（CSSまたはここで指定）
       if (node.level === 1) {
         div.style.color = node.color;
-        div.addEventListener('click', (e) => { e.stopPropagation(); focusOnCategory(node); });
-      } else if (node.level === 2) {
-        div.style.color = "#ffffff"; 
-        div.addEventListener('click', (e) => { 
-          e.stopPropagation(); 
-          if (activeItem === node.id) goBackFromItem();
-          else focusOnItem(node);
+        // ★ カテゴリの文字をクリックした時の処理を追加
+        div.addEventListener('click', (e) => {
+          e.stopPropagation(); // 背景クリックと重複しないようにする
+          focusOnCategory(node);
         });
+      } else if (node.level === 2) {
+        div.style.color = "#ffffff"; // ★ itemsを白に固定
       }
+      
       labelsContainer.appendChild(div);
       labelElements[node.id] = div;
     });
 
-    // 3Dグラフ設定
     const Graph = ForceGraph3D()(document.getElementById('3d-graph'))
       .graphData({ nodes, links })
       .nodeColor('color')
       .nodeVal('val')
-      .nodeOpacity(0.95)
+      .nodeOpacity(0.9)
       .linkOpacity(0.15)
       .backgroundColor('#010101')
       .showNavInfo(false)
       
+      // ★ 球体をクリックした時も共通処理を呼ぶ
       .onNodeClick(node => {
-        if (activeItem === node.id) goBackFromItem();
-        else if (node.level === 1) focusOnCategory(node);
-        else if (node.level === 2 && !activeItem) focusOnItem(node);
+        focusOnCategory(node);
       })
       
       .onBackgroundClick(() => {
-        if (activeCategory !== null && !activeItem) {
+        if (activeCategory !== null) {
           activeCategory = null;
           updateVisibility();
-          Graph.centerAt(0, 0, 0, 0);
           setInitialLayout();
-          Graph.cameraPosition({ x: 0, y: 0, z: 3600 }, { x: 0, y: 0, z: 0 }, 1000);
+          Graph.cameraPosition({ x: 0, y: 0, z: 1000 }, { x: 0, y: 0, z: 0 }, 1000);
         }
       });
-    
-    // オーバーレイクリックで戻る
-    overlay.addEventListener('click', () => {
-        if (activeItem) goBackFromItem();
-    });
 
-    const cam = Graph.camera();
-    cam.fov = 20; // 楕円化を防ぐための望遠レンズ設定
-    cam.updateProjectionMatrix();
-
-    // 物理エンジンを無効化（座標を手動で完全に制御するため）
-    Graph.d3Force('charge').strength(0);
-    Graph.d3Force('link').distance(0);
-
-    // 初期レイアウト
+    // 初期状態のレイアウト固定（円状）
     function setInitialLayout() {
+      Graph.d3Force('charge').strength(0);
+      Graph.d3Force('link').distance(0);
+
+      const mainNode = nodes.find(n => n.id === "root");
+      mainNode.fx = 0;
+      mainNode.fy = 0;
+      mainNode.fz = 0;
+
       const categoryNodes = nodes.filter(n => n.level === 1);
-      // 半径を800と大きく取り、見切れと重なりを防止
-      applyCircleLayout("root", categoryNodes, 800);
+      const radius = 300; 
+      const angleStep = (2 * Math.PI) / categoryNodes.length;
+
+      categoryNodes.forEach((node, idx) => {
+        node.fx = radius * Math.cos(idx * angleStep);
+        node.fy = radius * Math.sin(idx * angleStep);
+        node.fz = 0;
+      });
     }
 
     setInitialLayout();
     updateVisibility();
-    Graph.cameraPosition({ z: 3600 }); // 初期画面が確実に見切れない距離
+    Graph.cameraPosition({ z: 1000 });
 
-    // 表示制御
+    // 表示・非表示の切り替え
     function updateVisibility() {
       Graph.nodeVisibility(node => {
-        if (activeItem) return node.id === activeItem;
-        if (!activeCategory) return node.level < 2;
+        if (!activeCategory) return node.level < 2; 
         return node.id === activeCategory || node.parentId === activeCategory;
       });
       
       Graph.linkVisibility(link => {
-        if (activeItem) return false; 
         if (!activeCategory) {
           const targetId = link.target.id || link.target;
           return nodes.find(n => n.id === targetId)?.level === 1;
@@ -260,16 +178,14 @@
       });
     }
 
-    // 文字追従
+    // 文字ラベルの追従処理
     function updateLabels() {
       nodes.forEach(node => {
         const el = labelElements[node.id];
         if (el && node.x !== undefined) {
           
           let isVisible = true;
-          if (activeItem) {
-            isVisible = (node.id === activeItem); 
-          } else if (!activeCategory) {
+          if (!activeCategory) {
              if(node.level === 2) isVisible = false;
           } else {
             if (node.id === "root") {
@@ -280,25 +196,16 @@
           }
 
           const coords = Graph.graph2ScreenCoords(node.x, node.y, node.z);
-          if (!isVisible || coords.z < 0) {
+          if (!isVisible || coords.z < 0 || coords.z > 1) {
             el.style.opacity = 0;
             el.style.pointerEvents = 'none';
-            el.classList.remove('focused-item');
           } else {
+            // ★ 文字が常にはっきり見えるように opacity を調整
             el.style.opacity = 1; 
-            el.style.pointerEvents = 'auto'; 
-            
-            // ★ アイテム単体時はCSSで強制的に画面ど真ん中（top:50%, left:50%）に固定
-            if (activeItem && node.id === activeItem) {
-              el.classList.add('focused-item');
-              el.style.left = '';
-              el.style.top = '';
-            } else {
-              el.classList.remove('focused-item');
-              // 通常時は球体の座標に追従
-              el.style.left = `${coords.x}px`;
-              el.style.top = `${coords.y}px`;
-            }
+            el.style.pointerEvents = 'auto'; // クリック判定を有効にする
+            el.style.left = `${coords.x}px`;
+            const yOffset = node.level === 0 ? 40 : (node.level === 1 ? 25 : 12);
+            el.style.top = `${coords.y - yOffset}px`;
           }
         }
       });
