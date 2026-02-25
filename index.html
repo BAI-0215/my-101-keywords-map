@@ -4,17 +4,18 @@
   <meta charset="UTF-8">
   <title>Mashiro Akihito - 3D Universe 101</title>
   <script src="//unpkg.com/3d-force-graph"></script>
+  <script src="//unpkg.com/three"></script>
+  <script src="//unpkg.com/three-spritetext"></script>
   <style>
     body { margin: 0; background-color: #010101; color: white; font-family: sans-serif; overflow: hidden; }
     #info { position: absolute; top: 10px; left: 10px; z-index: 10; pointer-events: none; opacity: 0.6; font-size: 12px; }
   </style>
 </head>
 <body>
-  <div id="info">中心: Mashiro Akihito | キーワード: 計101個</div>
+  <div id="info">ドラッグで自由に移動可能 | mainとカテゴリはラベル常時表示</div>
   <div id="3d-graph"></div>
 
   <script>
-    // --- 101個のキーワードデータ ---
     const dataSet = {
       main: "Mashiro Akihito",
       categories: [
@@ -31,8 +32,7 @@
       ]
     };
 
-    // --- データの構築 ---
-    const nodes = [{ id: "root", name: dataSet.main, val: 50, level: 0, color: "#ffffff" }];
+    const nodes = [{ id: "root", name: dataSet.main, val: 100, level: 0, color: "#ffffff" }];
     const links = [];
     const colors = ["#ff5f5f", "#5fff5f", "#5f5fff", "#ffff5f", "#ff5fff", "#5fffff", "#ffaf5f", "#af5fff", "#5fffaf", "#ff5faf"];
 
@@ -40,11 +40,10 @@
       const catId = `cat-${gIdx}`;
       const groupColor = colors[gIdx % colors.length];
 
-      // カテゴリー(中)
-      nodes.push({ id: catId, name: cat.name, val: 25, level: 1, color: groupColor });
+      // カテゴリー(中：サイズを45へ)
+      nodes.push({ id: catId, name: cat.name, val: 45, level: 1, color: groupColor });
       links.push({ source: "root", target: catId });
 
-      // キーワード(小) - 合計101個
       cat.items.forEach((item, iIdx) => {
         const itemId = `item-${gIdx}-${iIdx}`;
         nodes.push({ id: itemId, name: item, val: 10, level: 2, color: groupColor });
@@ -52,20 +51,41 @@
       });
     });
 
-    // --- グラフの描画 ---
     const Graph = ForceGraph3D()
       (document.getElementById('3d-graph'))
         .graphData({ nodes, links })
         .nodeLabel('name')
-        .nodeColor(node => node.level === 2 ? `${node.color}66` : node.color) // 末端は透明度を下げる
         .nodeVal(node => node.val)
-        .nodeRelSize(1)
-        .linkOpacity(0.2)
+        .nodeColor(node => node.level === 2 ? `${node.color}44` : node.color)
+        .nodeThreeObject(node => {
+          // main(level 0) と カテゴリ(level 1) だけテキストを表示
+          if (node.level < 2) {
+            const sprite = new SpriteText(node.name);
+            sprite.color = node.color;
+            sprite.textHeight = node.level === 0 ? 12 : 8; // 文字の大きさ
+            sprite.position.y = node.level === 0 ? 15 : 10; // 球体の上に配置
+            
+            // 球体本体を作成
+            const sphereGeom = new THREE.SphereGeometry(Math.sqrt(node.val) * 2);
+            const sphereMat = new THREE.MeshLambertMaterial({ color: node.color, transparent: true, opacity: 0.8 });
+            const sphere = new THREE.Mesh(sphereGeom, sphereMat);
+            
+            // グループ化して返す
+            const group = new THREE.Group();
+            group.add(sphere);
+            group.add(sprite);
+            return group;
+          }
+          return false; // itemはデフォルトの球体のみ
+        })
+        .nodeThreeObjectExtend(true) // デフォルトの球体も表示
+        .linkOpacity(0.15)
         .linkWidth(0.5)
-        .linkDirectionalParticles(2)
         .backgroundColor('#010101');
 
-    Graph.d3Force('charge').strength(-250);
+    // 重力設定：中心への引きを弱くし、自由に動かせるように調整
+    Graph.d3Force('center', null); // 画面中央への強制力を無効化
+    Graph.d3Force('charge').strength(-300); // 反発を強めて重なりを防ぐ
   </script>
 </body>
 </html>
