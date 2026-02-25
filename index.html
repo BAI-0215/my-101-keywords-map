@@ -3,19 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <title>Mashiro Akihito - 3D Universe 101</title>
-  <script src="//unpkg.com/3d-force-graph"></script>
-  <script src="//unpkg.com/three"></script>
-  <script src="//unpkg.com/three-spritetext"></script>
+  <script src="https://unpkg.com/3d-force-graph"></script>
   <style>
     body { margin: 0; background-color: #010101; overflow: hidden; }
-    #info { position: absolute; top: 10px; left: 10px; z-index: 10; color: white; opacity: 0.6; font-size: 12px; pointer-events: none; }
+    #info { position: absolute; top: 10px; left: 10px; z-index: 10; color: white; opacity: 0.5; font-size: 10px; pointer-events: none; }
   </style>
 </head>
 <body>
-  <div id="info">ドラッグで自由に移動・固定解除 | ラベル常時表示</div>
+  <div id="info">Drag to move | Items: 101</div>
   <div id="3d-graph"></div>
 
   <script>
+    // --- 101個のキーワードデータ (末端だけで101個) ---
     const dataSet = {
       main: "Mashiro Akihito",
       categories: [
@@ -32,22 +31,43 @@
       ]
     };
 
-    const nodes = [{ id: "root", name: dataSet.main, val: 200, level: 0, color: "#ffffff" }];
+    // 101個にするため、最後のカテゴリーに1つ追加して調整
+    dataSet.categories[9].items.push("新たなステージ");
+
+    const nodes = [{ id: "root", name: dataSet.main, val: 300, level: 0, color: "#ffffff" }];
     const links = [];
     const colors = ["#ff5f5f", "#5fff5f", "#5f5fff", "#ffff5f", "#ff5fff", "#5fffff", "#ffaf5f", "#af5fff", "#5fffaf", "#ff5faf"];
 
     dataSet.categories.forEach((cat, gIdx) => {
       const catId = `cat-${gIdx}`;
       const groupColor = colors[gIdx % colors.length];
-      nodes.push({ id: catId, name: cat.name, val: 80, level: 1, color: groupColor });
+      nodes.push({ id: catId, name: cat.name, val: 150, level: 1, color: groupColor });
       links.push({ source: "root", target: catId });
 
       cat.items.forEach((item, iIdx) => {
         const itemId = `item-${gIdx}-${iIdx}`;
-        nodes.push({ id: itemId, name: item, val: 15, level: 2, color: groupColor });
+        nodes.push({ id: itemId, name: item, val: 20, level: 2, color: groupColor });
         links.push({ source: catId, target: itemId });
       });
     });
+
+    // 文字を画像として生成する関数 (安定性のための自作関数)
+    function createTextLabel(text, color, size) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 256;
+      canvas.height = 64;
+      ctx.font = `${size}px sans-serif`;
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.fillText(text, 128, 48);
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+      const sprite = new THREE.Sprite(spriteMaterial);
+      sprite.scale.set(40, 10, 1);
+      return sprite;
+    }
 
     const Graph = ForceGraph3D()
       (document.getElementById('3d-graph'))
@@ -56,34 +76,17 @@
         .nodeVal(node => node.val)
         .nodeColor(node => node.level === 2 ? `${node.color}44` : node.color)
         .nodeThreeObject(node => {
-          // main と category だけラベルを表示
           if (node.level < 2) {
-            const sprite = new SpriteText(node.name);
-            sprite.color = node.color;
-            sprite.textHeight = node.level === 0 ? 12 : 7;
-            sprite.padding = 2;
-            return sprite;
+            // mainとcategoryのみ名前を表示
+            const label = createTextLabel(node.name, node.color, node.level === 0 ? 40 : 32);
+            label.position.y = node.level === 0 ? 20 : 15;
+            return label;
           }
           return false;
         })
-        .nodeThreeObjectExtend(true) // デフォルトの球体も残す
+        .nodeThreeObjectExtend(true)
         .linkOpacity(0.2)
-        .linkWidth(0.5)
-        .backgroundColor('#010101')
-        .onNodeDragEnd(node => {
-          // ドラッグした位置で固定させたい場合は以下を有効に（今は自由移動）
-          node.fx = node.x;
-          node.fy = node.y;
-          node.fz = node.z;
-        });
+        .backgroundColor('#010101');
 
-    // --- 物理エンジンの微調整 ---
-    // centerをnullにせず、強度を極限まで弱めることで「飛んでいく」のを防ぎつつ自由度を確保
-    Graph.d3Force('center').strength(0.01); 
-    Graph.d3Force('charge').strength(-350); 
-    
-    // 初回表示時にカメラ位置を調整
-    Graph.cameraPosition({ z: 600 });
-  </script>
-</body>
-</html>
+    // 自由移動のための重力設定
+    Graph.d3Force('center').
