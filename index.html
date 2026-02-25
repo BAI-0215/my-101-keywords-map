@@ -10,34 +10,40 @@
     
     #labels-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
     
+    /* 文字を球体のど真ん中に配置して、楕円の錯覚を完全に防ぐ */
     .node-label {
       position: absolute;
       transform: translate(-50%, -50%) scale(1);
       font-weight: bold;
-      text-shadow: 0px 0px 5px #000, 0px 0px 10px #000;
+      text-shadow: 0px 0px 6px #000, 0px 0px 12px #000;
       white-space: nowrap;
-      transition: opacity 0.3s ease, transform 0.2s ease, color 0.2s ease;
+      transition: opacity 0.3s ease, transform 0.3s ease, color 0.3s ease;
+      pointer-events: auto;
+      cursor: pointer;
     }
     
-    /* メインの文字をさらに大きく */
-    .label-level-0 { font-size: 42px; color: #ffffff; z-index: 3; }
+    /* メイン球体の文字サイズ */
+    .label-level-0 { font-size: 48px; color: #ffffff; z-index: 3; }
     
-    .label-level-1 { font-size: 20px; z-index: 2; cursor: pointer; pointer-events: auto; }
-    .label-level-1:hover { transform: translate(-50%, -50%) scale(1.2); }
+    /* カテゴリの文字サイズ */
+    .label-level-1 { font-size: 22px; z-index: 2; }
+    .label-level-1:hover { transform: translate(-50%, -50%) scale(1.3); }
     
-    .label-level-2 { font-size: 14px; z-index: 1; color: #ffffff; cursor: pointer; pointer-events: auto; }
+    /* アイテムの文字サイズ（白に固定） */
+    .label-level-2 { font-size: 14px; z-index: 1; color: #ffffff; }
     .label-level-2:hover { transform: translate(-50%, -50%) scale(1.6); color: #ffffaa !important; }
 
-    /* ★ アイテム単体ページになった時の専用スタイル */
+    /* ★ アイテム単体（全画面）になった時の専用スタイル（文字サイズを2倍以上に巨大化） */
     .focused-item {
-      transform: translate(-50%, -50%) scale(2.5) !important; /* 2.5倍の巨大文字に */
+      transform: translate(-50%, -50%) scale(3.5) !important;
       color: #ffffff !important;
-      text-shadow: 0px 0px 20px rgba(255, 255, 255, 0.5), 0px 0px 10px #000;
+      text-shadow: 0px 0px 20px rgba(0, 0, 0, 0.8), 0px 0px 10px #000;
+      z-index: 100;
     }
   </style>
 </head>
 <body>
-  <div id="guide">文字/球体クリックで【深掘り】 / 背景クリックで【1つ戻る】</div>
+  <div id="guide">文字/球体クリックで【深掘り】 / 画面クリックで【1つ戻る】</div>
   <div id="3d-graph"></div>
   <div id="labels-container"></div>
 
@@ -58,8 +64,8 @@
       ]
     };
 
-    // ★ メイン(root)のvalを120→350に巨大化
-    const nodes = [{ id: "root", name: dataSet.main, val: 350, level: 0, color: "#ffffff" }];
+    // ★ メインの球体をさらに巨大化 (val: 400)
+    const nodes = [{ id: "root", name: dataSet.main, val: 400, level: 0, color: "#ffffff" }];
     const links = [];
     const colors = ["#FF3366", "#33FF99", "#3366FF", "#FFCC33", "#FF66FF", "#33FFFF", "#FFA500", "#9966FF", "#CCFF33", "#FF4500"];
 
@@ -71,7 +77,6 @@
 
       cat.items.forEach((item, iIdx) => {
         const itemId = `item-${gIdx}-${iIdx}`;
-        // itemsの球体も少し大きく（15→20）
         nodes.push({ id: itemId, name: item, val: 20, level: 2, color: groupColor, parentId: catId });
         links.push({ source: catId, target: itemId });
       });
@@ -80,25 +85,22 @@
     const labelsContainer = document.getElementById('labels-container');
     const labelElements = {};
     
-    // ★ 状態管理
-    let activeCategory = null; // 選択中のカテゴリ
-    let activeItem = null;     // 選択中のアイテム単体
+    // 状態管理
+    let activeCategory = null; 
+    let activeItem = null;     
 
     // --- 各種展開アクション ---
 
-    // 1. カテゴリを選択した時（2D展開）
+    // 1. カテゴリ展開（2D円状）
     function focusOnCategory(node) {
-      if (node.level !== 1) return;
+      if (node.level !== 1 || activeItem) return;
       activeCategory = node.id;
-      activeItem = null; // アイテム選択をリセット
       updateVisibility();
       
-      // カテゴリを真ん中に
       node.fx = 0; node.fy = 0; node.fz = 0;
 
-      // itemsを円状に並べる
       const childItems = nodes.filter(n => n.parentId === activeCategory);
-      const radius = 180;
+      const radius = 220; // 軌道を少し広げて見やすく
       const angleStep = (2 * Math.PI) / childItems.length;
       
       childItems.forEach((item, idx) => {
@@ -107,23 +109,50 @@
         item.fz = 0; 
       });
 
-      Graph.cameraPosition({ x: 0, y: 0, z: 450 }, { x: 0, y: 0, z: 0 }, 1000);
+      Graph.cameraPosition({ x: 0, y: 0, z: 1200 }, { x: 0, y: 0, z: 0 }, 1000);
     }
 
-    // 2. アイテムを選択した時（単体フォーカス）
+    // 2. ★ アイテム単体展開（全画面を埋め尽くす演出）
     function focusOnItem(node) {
       if (node.level !== 2) return;
       activeItem = node.id;
       updateVisibility();
 
-      // 選んだアイテムを真ん中に固定
       node.fx = 0; node.fy = 0; node.fz = 0;
+      Graph.cameraPosition({ x: 0, y: 0, z: 1000 }, { x: 0, y: 0, z: 0 }, 1000);
 
-      // カメラをグッと近づける
-      Graph.cameraPosition({ x: 0, y: 0, z: 150 }, { x: 0, y: 0, z: 0 }, 1000);
+      // 球体のサイズ(val)を徐々に巨大化させて画面を埋め尽くすアニメーション
+      const startVal = node.val;
+      const targetVal = 500000; // 画面を覆い尽くすほどの極大サイズ
+      const startTime = performance.now();
+      
+      function grow(time) {
+        if (activeItem !== node.id) return; // 戻るボタンが押されたら中止
+        const progress = Math.min((time - startTime) / 800, 1);
+        const ease = 1 - Math.pow(1 - progress, 3); // 滑らかに減速
+        node.animVal = startVal + (targetVal - startVal) * ease;
+        Graph.nodeVal(n => n.animVal || n.val);
+        
+        if (progress < 1) requestAnimationFrame(grow);
+      }
+      requestAnimationFrame(grow);
     }
 
-    // --- HTMLラベルの生成とクリック処理 ---
+    // 3. アイテム単体から「戻る」処理
+    function goBackFromItem() {
+      const node = nodes.find(n => n.id === activeItem);
+      node.animVal = node.val; // 球体のサイズを元に戻す
+      Graph.nodeVal(n => n.animVal || n.val);
+      delete node.fx; delete node.fy; delete node.fz;
+
+      activeItem = null;
+      updateVisibility();
+
+      const categoryNode = nodes.find(n => n.id === activeCategory);
+      focusOnCategory(categoryNode);
+    }
+
+    // --- HTMLラベルの生成 ---
     nodes.forEach(node => {
       const div = document.createElement('div');
       div.className = `node-label label-level-${node.level}`;
@@ -134,10 +163,12 @@
         div.addEventListener('click', (e) => { e.stopPropagation(); focusOnCategory(node); });
       } else if (node.level === 2) {
         div.style.color = "#ffffff"; 
-        // ★ itemsのクリックイベントを追加
-        div.addEventListener('click', (e) => { e.stopPropagation(); focusOnItem(node); });
+        div.addEventListener('click', (e) => { 
+          e.stopPropagation(); 
+          if (activeItem === node.id) goBackFromItem(); // 巨大化時はクリックで戻る
+          else focusOnItem(node); // 通常時はクリックで巨大化
+        });
       }
-      
       labelsContainer.appendChild(div);
       labelElements[node.id] = div;
     });
@@ -146,39 +177,33 @@
     const Graph = ForceGraph3D()(document.getElementById('3d-graph'))
       .graphData({ nodes, links })
       .nodeColor('color')
-      .nodeVal('val')
-      .nodeOpacity(0.9)
+      .nodeVal(n => n.animVal || n.val) // アニメーション用の値を優先
+      .nodeOpacity(0.95)
       .linkOpacity(0.15)
       .backgroundColor('#010101')
       .showNavInfo(false)
       
       .onNodeClick(node => {
-        if (node.level === 1) focusOnCategory(node);
-        if (node.level === 2) focusOnItem(node);
+        if (activeItem === node.id) goBackFromItem();
+        else if (node.level === 1) focusOnCategory(node);
+        else if (node.level === 2 && !activeItem) focusOnItem(node);
       })
       
-      // ★ 背景クリック（戻る処理）
       .onBackgroundClick(() => {
         if (activeItem !== null) {
-          // アイテム単体 → カテゴリ2D展開 へ1つ戻る
-          const currentItemNode = nodes.find(n => n.id === activeItem);
-          delete currentItemNode.fx; delete currentItemNode.fy; delete currentItemNode.fz;
-          
-          activeItem = null;
-          updateVisibility();
-          
-          // 円状のレイアウトを再適用
-          const categoryNode = nodes.find(n => n.id === activeCategory);
-          focusOnCategory(categoryNode);
-          
+          goBackFromItem(); // 全画面からカテゴリへ戻る
         } else if (activeCategory !== null) {
-          // カテゴリ2D展開 → 初期宇宙 へ戻る
-          activeCategory = null;
+          activeCategory = null; // カテゴリから全体へ戻る
           updateVisibility();
           setInitialLayout();
-          Graph.cameraPosition({ x: 0, y: 0, z: 1000 }, { x: 0, y: 0, z: 0 }, 1000);
+          Graph.cameraPosition({ x: 0, y: 0, z: 2500 }, { x: 0, y: 0, z: 0 }, 1000);
         }
       });
+
+    // ★ カメラのレンズ歪み（楕円化）を修正する設定
+    const cam = Graph.camera();
+    cam.fov = 20; // 視野角を狭くして遠近法の歪みを消す（平面に見える魔法）
+    cam.updateProjectionMatrix();
 
     // --- 初期レイアウト設定 ---
     function setInitialLayout() {
@@ -189,7 +214,7 @@
       mainNode.fx = 0; mainNode.fy = 0; mainNode.fz = 0;
 
       const categoryNodes = nodes.filter(n => n.level === 1);
-      const radius = 350; // 中心が大きくなったので軌道も少し広げる
+      const radius = 400; // FOV変更に合わせて配置も広げる
       const angleStep = (2 * Math.PI) / categoryNodes.length;
 
       categoryNodes.forEach((node, idx) => {
@@ -201,18 +226,18 @@
 
     setInitialLayout();
     updateVisibility();
-    Graph.cameraPosition({ z: 1000 });
+    Graph.cameraPosition({ z: 2500 }); // FOVを狭くした分、カメラを遠くに配置
 
     // --- 表示・非表示のロジック ---
     function updateVisibility() {
       Graph.nodeVisibility(node => {
-        if (activeItem) return node.id === activeItem; // ★ アイテム単体モード
-        if (!activeCategory) return node.level < 2; // 初期モード
-        return node.id === activeCategory || node.parentId === activeCategory; // カテゴリモード
+        if (activeItem) return node.id === activeItem; // ★ 1. アイテム単体時は他を全消去
+        if (!activeCategory) return node.level < 2;    // ★ 2. 初期画面はカテゴリまで
+        return node.id === activeCategory || node.parentId === activeCategory;
       });
       
       Graph.linkVisibility(link => {
-        if (activeItem) return false; // ★ アイテム単体時は線なし
+        if (activeItem) return false; 
         if (!activeCategory) {
           const targetId = link.target.id || link.target;
           return nodes.find(n => n.id === targetId)?.level === 1;
@@ -230,7 +255,7 @@
           
           let isVisible = true;
           if (activeItem) {
-            isVisible = (node.id === activeItem); // ★ アイテム単体モードの表示判定
+            isVisible = (node.id === activeItem); 
           } else if (!activeCategory) {
              if(node.level === 2) isVisible = false;
           } else {
@@ -251,18 +276,15 @@
             el.style.pointerEvents = 'auto'; 
             el.style.left = `${coords.x}px`;
             
-            // ★ クラスの付け外しによる文字の巨大化と、Y軸の微調整
-            let yOffset = 0;
+            // ★ クラスの付け外しによる文字の巨大化
             if (activeItem && node.id === activeItem) {
               el.classList.add('focused-item');
-              yOffset = 30; // 巨大化した時の位置調整
             } else {
               el.classList.remove('focused-item');
-              // 中心球体が巨大になったため、レベル0の文字を上に押し上げる
-              yOffset = node.level === 0 ? 65 : (node.level === 1 ? 25 : 12);
             }
             
-            el.style.top = `${coords.y - yOffset}px`;
+            // ★ 文字を球体のど真ん中に配置（楕円化の錯覚を防止）
+            el.style.top = `${coords.y}px`;
           }
         }
       });
