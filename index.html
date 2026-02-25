@@ -21,10 +21,35 @@
     /* カテゴリの文字にカーソルを合わせるとポインターになるように設定 */
     .label-level-1 { font-size: 20px; z-index: 2; cursor: pointer; } 
     /* itemsの文字色を白に指定 */
-    .label-level-2 { font-size: 14px; z-index: 1; color: #ffffff; } 
+    .label-level-2 { font-size: 14px; z-index: 1; color: #ffffff; cursor: pointer; } 
+
+    /* itemsページ（3ページ目）用のスタイル追加 */
+    #item-overlay {
+      position: fixed;
+      width: 300vmax;
+      height: 300vmax;
+      border-radius: 50%;
+      transform: translate(-50%, -50%) scale(0);
+      transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+      z-index: 5; /* ★ 20から5に変更。文字のコンテナ(z-index:10)より下に配置する */
+      pointer-events: none;
+    }
+    #item-overlay.active {
+      transform: translate(-50%, -50%) scale(1);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    .node-label.item-centered {
+      left: 50% !important;
+      top: 50% !important;
+      transform: translate(-50%, -50%) scale(3) !important; /* 文字を大きく見せる */
+      z-index: 25 !important;
+      transition: all 0.8s cubic-bezier(0.25, 1, 0.5, 1) !important;
+    }
   </style>
 </head>
 <body>
+  <div id="item-overlay"></div>
   <div id="guide">カテゴリ（球体または文字）をクリックで【詳細展開】 / 背景の黒い部分をクリックで【全体表示】に戻る</div>
   <div id="3d-graph"></div>
   <div id="labels-container"></div>
@@ -66,6 +91,49 @@
     const labelsContainer = document.getElementById('labels-container');
     const labelElements = {};
     let activeCategory = null;
+    let activeItem = null; // ★ 3ページ目（itemsページ）用の状態管理を追加
+
+    // ★ items（3ページ目）展開処理
+    function focusOnItem(node) {
+      if (node.level !== 2) return;
+      activeItem = node;
+      
+      const overlay = document.getElementById('item-overlay');
+      const coords = Graph.graph2ScreenCoords(node.x, node.y, node.z);
+      
+      // クリックした球体の位置から背景が広がるように初期位置を設定
+      overlay.style.backgroundColor = node.color;
+      overlay.style.left = `${coords.x}px`;
+      overlay.style.top = `${coords.y}px`;
+      
+      // ブラウザにスタイルの変更を即座に反映させる（リフロー）
+      void overlay.offsetWidth;
+      
+      overlay.classList.add('active');
+      
+      // 文字を中央へアニメーションさせるクラスを付与
+      const el = labelElements[node.id];
+      el.classList.add('item-centered');
+      
+      document.getElementById('guide').innerText = "画面をクリックで【カテゴリ詳細】に戻る";
+    }
+
+    // ★ itemsページから戻る処理
+    function closeItemView() {
+      if (!activeItem) return;
+      
+      const overlay = document.getElementById('item-overlay');
+      overlay.classList.remove('active');
+      
+      const el = labelElements[activeItem.id];
+      el.classList.remove('item-centered');
+      
+      activeItem = null;
+      document.getElementById('guide').innerText = "カテゴリ（球体または文字）をクリックで【詳細展開】 / 背景の黒い部分をクリックで【全体表示】に戻る";
+    }
+
+    // 背景（オーバーレイ）クリックで戻る
+    document.getElementById('item-overlay').addEventListener('click', closeItemView);
 
     // ★ 共通のカテゴリ展開処理（球体クリックでも文字クリックでもここを呼び出す）
     function focusOnCategory(node) {
@@ -103,10 +171,20 @@
         // ★ カテゴリの文字をクリックした時の処理を追加
         div.addEventListener('click', (e) => {
           e.stopPropagation(); // 背景クリックと重複しないようにする
+          if (activeItem) return; // itemsページ展開中は無効化
           focusOnCategory(node);
         });
       } else if (node.level === 2) {
         div.style.color = "#ffffff"; // ★ itemsを白に固定
+        // ★ itemsの文字をクリックした時の処理を追加
+        div.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (activeItem && activeItem.id === node.id) {
+            closeItemView();
+          } else if (!activeItem) {
+            focusOnItem(node);
+          }
+        });
       }
       
       labelsContainer.appendChild(div);
@@ -124,7 +202,12 @@
       
       // ★ 球体をクリックした時も共通処理を呼ぶ
       .onNodeClick(node => {
-        focusOnCategory(node);
+        if (activeItem) return; // itemsページ展開中は無効化
+        if (node.level === 1) {
+          focusOnCategory(node);
+        } else if (node.level === 2) {
+          focusOnItem(node);
+        }
       })
       
       .onBackgroundClick(() => {
@@ -184,6 +267,18 @@
         const el = labelElements[node.id];
         if (el && node.x !== undefined) {
           
+          // ★ itemsページ表示時のラベル制御
+          if (activeItem) {
+            if (node.id === activeItem.id) {
+              el.style.opacity = 1;
+              el.style.pointerEvents = 'auto';
+            } else {
+              el.style.opacity = 0;
+              el.style.pointerEvents = 'none';
+            }
+            return; // CSSアニメーションで中央に固定されるので、座標更新はスキップ
+          }
+
           let isVisible = true;
           if (!activeCategory) {
              if(node.level === 2) isVisible = false;
