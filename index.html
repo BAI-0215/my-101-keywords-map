@@ -6,7 +6,8 @@
   <script src="https://unpkg.com/3d-force-graph"></script>
   <style>
     body { margin: 0; background-color: #010101; overflow: hidden; font-family: "Helvetica Neue", Arial, sans-serif; }
-    #guide { position: absolute; bottom: 20px; width: 100%; text-align: center; color: rgba(255,255,255,0.7); pointer-events: none; font-size: 14px; z-index: 30; font-weight: bold; }
+    /* ★ 修正1: ガイドのテキストを左上に移動し、左揃えに変更。2段表示用にline-heightを追加 */
+    #guide { position: absolute; top: 20px; left: 20px; text-align: left; color: rgba(255,255,255,0.7); pointer-events: none; font-size: 14px; z-index: 30; font-weight: bold; text-shadow: 0px 0px 5px #000; line-height: 1.6; }
     
     #labels-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
     .node-label {
@@ -15,13 +16,16 @@
       font-weight: bold;
       text-shadow: 0px 0px 5px #000, 0px 0px 10px #000;
       white-space: nowrap;
-      transition: opacity 0.3s ease;
+      /* ★ 修正3用: transform のアニメーションを追加 */
+      transition: opacity 0.3s ease, transform 0.2s ease;
     }
     .label-level-0 { font-size: 36px; color: #ffffff; z-index: 3; }
     /* カテゴリの文字にカーソルを合わせるとポインターになるように設定 */
     .label-level-1 { font-size: 20px; z-index: 2; cursor: pointer; } 
     /* itemsの文字色を白に指定 */
     .label-level-2 { font-size: 14px; z-index: 1; color: #ffffff; cursor: pointer; } 
+    /* ★ 修正3: itemsの文字にホバーした際に拡大するスタイルを追加 */
+    .label-level-2:not(.item-centered):hover { transform: translate(-50%, -50%) scale(1.6); z-index: 15; }
 
     /* itemsページ（3ページ目）用のスタイル追加 */
     #item-overlay {
@@ -50,7 +54,7 @@
 </head>
 <body>
   <div id="item-overlay"></div>
-  <div id="guide">カテゴリ（球体または文字）をクリックで【詳細展開】 / 背景の黒い部分をクリックで【全体表示】に戻る</div>
+  <div id="guide">カテゴリをクリックで詳細を展開できる。<br>背景の黒い部分をクリックで前のページに戻る。</div>
   <div id="3d-graph"></div>
   <div id="labels-container"></div>
 
@@ -71,7 +75,8 @@
       ]
     };
 
-    const nodes = [{ id: "root", name: dataSet.main, val: 120, level: 0, color: "#ffffff" }];
+    // ★ 修正2: メインのノードの val を 120 から 180（1.5倍）に変更
+    const nodes = [{ id: "root", name: dataSet.main, val: 180, level: 0, color: "#ffffff" }];
     const links = [];
     const colors = ["#FF3366", "#33FF99", "#3366FF", "#FFCC33", "#FF66FF", "#33FFFF", "#FFA500", "#9966FF", "#CCFF33", "#FF4500"];
 
@@ -115,7 +120,8 @@
       const el = labelElements[node.id];
       el.classList.add('item-centered');
       
-      document.getElementById('guide').innerText = "画面をクリックで【カテゴリ詳細】に戻る";
+      // テキスト変更（改行等を含めるためinnerHTMLを使用）
+      document.getElementById('guide').innerHTML = "画面をクリックで前のページに戻る。";
     }
 
     // ★ itemsページから戻る処理
@@ -129,7 +135,8 @@
       el.classList.remove('item-centered');
       
       activeItem = null;
-      document.getElementById('guide').innerText = "カテゴリ（球体または文字）をクリックで【詳細展開】 / 背景の黒い部分をクリックで【全体表示】に戻る";
+      // 元のテキストに戻す
+      document.getElementById('guide').innerHTML = "カテゴリをクリックで詳細を展開できる。<br>背景の黒い部分をクリックで前のページに戻る。";
     }
 
     // 背景（オーバーレイ）クリックで戻る
@@ -199,6 +206,8 @@
       .linkOpacity(0.15)
       .backgroundColor('#010101')
       .showNavInfo(false)
+      // ★ 修正4: マウスホバー時にデフォルトで表示されるツールチップ（文字）を非表示にする
+      .nodeLabel(() => null)
       
       // ★ 球体をクリックした時も共通処理を呼ぶ
       .onNodeClick(node => {
