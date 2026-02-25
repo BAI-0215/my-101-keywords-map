@@ -2,19 +2,18 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Mashiro Akihito - 3D Universe 101</title>
+  <title>Mashiro Akihito - 3D Universe (Safe Mode)</title>
   <script src="https://unpkg.com/3d-force-graph"></script>
   <style>
-    body { margin: 0; background-color: #010101; overflow: hidden; }
-    #info { position: absolute; top: 10px; left: 10px; z-index: 10; color: white; opacity: 0.5; font-size: 10px; pointer-events: none; font-family: sans-serif; }
+    body { margin: 0; background-color: #010101; overflow: hidden; color: white; font-family: sans-serif; }
+    #info { position: absolute; top: 10px; left: 10px; z-index: 10; font-size: 14px; opacity: 0.8; pointer-events: none; }
   </style>
 </head>
 <body>
-  <div id="info">Mashiro Akihito: 101 Keywords Universe | Drag to move</div>
+  <div id="info">Mashiro Akihito 101 Keywords<br>※マウスを乗せると名前が表示されます</div>
   <div id="3d-graph"></div>
 
   <script>
-    // --- 101個のキーワードデータ ---
     const dataSet = {
       main: "Mashiro Akihito",
       categories: [
@@ -31,65 +30,33 @@
       ]
     };
 
-    // データの構築
-    const nodes = [{ id: "root", name: dataSet.main, val: 350, level: 0, color: "#ffffff" }];
+    const nodes = [{ id: "root", name: dataSet.main, val: 150, color: "#ffffff" }];
     const links = [];
     const colors = ["#ff5f5f", "#5fff5f", "#5f5fff", "#ffff5f", "#ff5fff", "#5fffff", "#ffaf5f", "#af5fff", "#5fffaf", "#ff5faf"];
 
     dataSet.categories.forEach((cat, gIdx) => {
       const catId = `cat-${gIdx}`;
       const groupColor = colors[gIdx % colors.length];
-      nodes.push({ id: catId, name: cat.name, val: 180, level: 1, color: groupColor });
+      nodes.push({ id: catId, name: cat.name, val: 50, color: groupColor });
       links.push({ source: "root", target: catId });
 
       cat.items.forEach((item, iIdx) => {
         const itemId = `item-${gIdx}-${iIdx}`;
-        nodes.push({ id: itemId, name: item, val: 25, level: 2, color: groupColor });
+        nodes.push({ id: itemId, name: item, val: 10, color: groupColor });
         links.push({ source: catId, target: itemId });
       });
     });
 
-    // グラフの初期化
     const Graph = ForceGraph3D()(document.getElementById('3d-graph'))
       .graphData({ nodes, links })
-      .nodeLabel('name')
-      .nodeVal(node => node.val)
-      .nodeColor(node => node.level === 2 ? `${node.color}33` : node.color) // itemsは透明度を低く(33)
-      .nodeOpacity(0.9)
-      .linkOpacity(0.15)
-      .linkWidth(0.5)
+      .nodeLabel('name') // ホバーした時だけ名前を表示する安全な機能
+      .nodeVal('val')
+      .nodeColor('color')
       .backgroundColor('#010101')
-      // HTMLのラベル機能を使って文字を常時表示（ライブラリ衝突を避ける最も安全な方法）
-      .nodeThreeObject(node => {
-        if (node.level < 2) {
-          // 2D Canvasを使って文字を作成
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          const label = node.name;
-          canvas.width = 300;
-          canvas.height = 100;
-          ctx.font = `${node.level === 0 ? 'Bold 40px' : '32px'} sans-serif`;
-          ctx.fillStyle = node.color;
-          ctx.textAlign = 'center';
-          ctx.fillText(label, 150, 70);
-          
-          const texture = new THREE.CanvasTexture(canvas);
-          const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
-          const sprite = new THREE.Sprite(spriteMaterial);
-          sprite.scale.set(node.level === 0 ? 60 : 40, 20, 1);
-          sprite.position.y = node.level === 0 ? 25 : 18;
-          return sprite;
-        }
-        return false;
-      })
-      .nodeThreeObjectExtend(true);
+      .linkOpacity(0.3)
+      .linkWidth(0.5);
 
-    // 自由移動のための設定
-    Graph.d3Force('center').strength(0.02);
-    Graph.d3Force('charge').strength(-600); // 反発を強めて重なりを防ぐ
-
-    // 初回表示のズーム調整
-    Graph.cameraPosition({ z: 800 });
+    Graph.d3Force('charge').strength(-300);
   </script>
 </body>
 </html>
