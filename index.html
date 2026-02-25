@@ -255,6 +255,8 @@
           updateVisibility();
           setInitialLayout();
           Graph.cameraPosition({ x: 0, y: 0, z: 1000 }, { x: 0, y: 0, z: 0 }, 1000);
+          // ★ 修正: 前のページに戻った瞬間に、物理エンジンを再始動して回転を再開させる
+          Graph.d3ReheatSimulation();
         }
       });
 
