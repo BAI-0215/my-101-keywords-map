@@ -6,15 +6,15 @@
   <script src="https://unpkg.com/3d-force-graph"></script>
   <style>
     body { margin: 0; background-color: #010101; overflow: hidden; }
-    #info { position: absolute; top: 10px; left: 10px; z-index: 10; color: white; opacity: 0.5; font-size: 10px; pointer-events: none; }
+    #info { position: absolute; top: 10px; left: 10px; z-index: 10; color: white; opacity: 0.5; font-size: 10px; pointer-events: none; font-family: sans-serif; }
   </style>
 </head>
 <body>
-  <div id="info">Drag to move | Items: 101</div>
+  <div id="info">Mashiro Akihito: 101 Keywords Universe | Drag to move</div>
   <div id="3d-graph"></div>
 
   <script>
-    // --- 101個のキーワードデータ (末端だけで101個) ---
+    // --- 101個のキーワードデータ ---
     const dataSet = {
       main: "Mashiro Akihito",
       categories: [
@@ -27,66 +27,69 @@
         { name: "エンタメ・趣味", items: ["AKB48", "B'z", "日本のポップカルチャー", "音楽鑑賞", "ライブへの情熱", "アイドル文化", "邦楽トレンド", "リラックスタイム", "多趣味な日常", "映画鑑賞"] },
         { name: "専門的ソフトスキル", items: ["UI/UX改善", "ユーザー理解", "課題解決能力", "ロジカルシンキング", "プロジェクト管理", "ドキュメント作成", "プレゼンテーション", "チーム連携", "分析的思考", "交渉力"] },
         { name: "価値観・マインドセット", items: ["誠実な貢献", "自律的な行動", "高い好奇心", "柔軟な思考", "改善マインド", "プロフェッショナリズム", "本質志向", "持続可能な成長", "知的な探求", "継続力"] },
-        { name: "2026年と未来への展望", items: ["目標の達成", "スキルの成熟", "豊かな人生の構築", "安定と挑戦の両立", "新しいコミュニティ", "影響力の拡大", "幸福の追求", "未来の自分への投資", "次なるマイルストーン", "社会貢献", "ライフワークバランス"] }
+        { name: "2026年と未来への展望", items: ["目標の達成", "スキルの成熟", "豊かな人生の構築", "安定と挑戦の両立", "新しいコミュニティ", "影響力の拡大", "幸福の追求", "未来の自分への投資", "次なるマイルストーン", "社会貢献", "新たなステージ"] }
       ]
     };
 
-    // 101個にするため、最後のカテゴリーに1つ追加して調整
-    dataSet.categories[9].items.push("新たなステージ");
-
-    const nodes = [{ id: "root", name: dataSet.main, val: 300, level: 0, color: "#ffffff" }];
+    // データの構築
+    const nodes = [{ id: "root", name: dataSet.main, val: 350, level: 0, color: "#ffffff" }];
     const links = [];
     const colors = ["#ff5f5f", "#5fff5f", "#5f5fff", "#ffff5f", "#ff5fff", "#5fffff", "#ffaf5f", "#af5fff", "#5fffaf", "#ff5faf"];
 
     dataSet.categories.forEach((cat, gIdx) => {
       const catId = `cat-${gIdx}`;
       const groupColor = colors[gIdx % colors.length];
-      nodes.push({ id: catId, name: cat.name, val: 150, level: 1, color: groupColor });
+      nodes.push({ id: catId, name: cat.name, val: 180, level: 1, color: groupColor });
       links.push({ source: "root", target: catId });
 
       cat.items.forEach((item, iIdx) => {
         const itemId = `item-${gIdx}-${iIdx}`;
-        nodes.push({ id: itemId, name: item, val: 20, level: 2, color: groupColor });
+        nodes.push({ id: itemId, name: item, val: 25, level: 2, color: groupColor });
         links.push({ source: catId, target: itemId });
       });
     });
 
-    // 文字を画像として生成する関数 (安定性のための自作関数)
-    function createTextLabel(text, color, size) {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = 256;
-      canvas.height = 64;
-      ctx.font = `${size}px sans-serif`;
-      ctx.fillStyle = color;
-      ctx.textAlign = 'center';
-      ctx.fillText(text, 128, 48);
-      
-      const texture = new THREE.CanvasTexture(canvas);
-      const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
-      const sprite = new THREE.Sprite(spriteMaterial);
-      sprite.scale.set(40, 10, 1);
-      return sprite;
-    }
+    // グラフの初期化
+    const Graph = ForceGraph3D()(document.getElementById('3d-graph'))
+      .graphData({ nodes, links })
+      .nodeLabel('name')
+      .nodeVal(node => node.val)
+      .nodeColor(node => node.level === 2 ? `${node.color}33` : node.color) // itemsは透明度を低く(33)
+      .nodeOpacity(0.9)
+      .linkOpacity(0.15)
+      .linkWidth(0.5)
+      .backgroundColor('#010101')
+      // HTMLのラベル機能を使って文字を常時表示（ライブラリ衝突を避ける最も安全な方法）
+      .nodeThreeObject(node => {
+        if (node.level < 2) {
+          // 2D Canvasを使って文字を作成
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const label = node.name;
+          canvas.width = 300;
+          canvas.height = 100;
+          ctx.font = `${node.level === 0 ? 'Bold 40px' : '32px'} sans-serif`;
+          ctx.fillStyle = node.color;
+          ctx.textAlign = 'center';
+          ctx.fillText(label, 150, 70);
+          
+          const texture = new THREE.CanvasTexture(canvas);
+          const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+          const sprite = new THREE.Sprite(spriteMaterial);
+          sprite.scale.set(node.level === 0 ? 60 : 40, 20, 1);
+          sprite.position.y = node.level === 0 ? 25 : 18;
+          return sprite;
+        }
+        return false;
+      })
+      .nodeThreeObjectExtend(true);
 
-    const Graph = ForceGraph3D()
-      (document.getElementById('3d-graph'))
-        .graphData({ nodes, links })
-        .nodeLabel('name')
-        .nodeVal(node => node.val)
-        .nodeColor(node => node.level === 2 ? `${node.color}44` : node.color)
-        .nodeThreeObject(node => {
-          if (node.level < 2) {
-            // mainとcategoryのみ名前を表示
-            const label = createTextLabel(node.name, node.color, node.level === 0 ? 40 : 32);
-            label.position.y = node.level === 0 ? 20 : 15;
-            return label;
-          }
-          return false;
-        })
-        .nodeThreeObjectExtend(true)
-        .linkOpacity(0.2)
-        .backgroundColor('#010101');
+    // 自由移動のための設定
+    Graph.d3Force('center').strength(0.02);
+    Graph.d3Force('charge').strength(-600); // 反発を強めて重なりを防ぐ
 
-    // 自由移動のための重力設定
-    Graph.d3Force('center').
+    // 初回表示のズーム調整
+    Graph.cameraPosition({ z: 800 });
+  </script>
+</body>
+</html>
