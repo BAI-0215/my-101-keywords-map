@@ -2,29 +2,16 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Mashiro Akihito - 3D Universe</title>
+  <title>Mashiro Akihito - Professional Universe</title>
   <script src="https://unpkg.com/3d-force-graph"></script>
   <style>
-    body { margin: 0; background-color: #010101; overflow: hidden; font-family: sans-serif; }
-    #info { position: absolute; top: 10px; left: 10px; z-index: 20; color: white; opacity: 0.8; font-size: 12px; pointer-events: none; }
-    
-    /* 3D空間の手前に重ねる文字のスタイル */
-    #labels-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
-    .node-label {
-      position: absolute;
-      transform: translate(-50%, -50%);
-      font-weight: bold;
-      text-shadow: 0px 0px 5px #000, 0px 0px 8px #000; /* 黒のフチドリで読みやすく */
-      transition: opacity 0.1s;
-    }
-    .label-main { font-size: 24px; color: #ffffff; }
-    .label-cat { font-size: 14px; }
+    body { margin: 0; background-color: #010101; overflow: hidden; font-family: "Helvetica Neue", Arial, sans-serif; }
+    #guide { position: absolute; bottom: 20px; width: 100%; text-align: center; color: rgba(255,255,255,0.5); pointer-events: none; font-size: 12px; }
   </style>
 </head>
 <body>
-  <div id="info">Drag to move & fix | 101 Keywords</div>
+  <div id="guide">左クリックで回転 / 右クリックで並行移動 / ホイールでズーム / 球体クリックでフォーカス</div>
   <div id="3d-graph"></div>
-  <div id="labels-container"></div>
 
   <script>
     const dataSet = {
@@ -39,27 +26,20 @@
         { name: "エンタメ・趣味", items: ["AKB48", "B'z", "日本のポップカルチャー", "音楽鑑賞", "ライブへの情熱", "アイドル文化", "邦楽トレンド", "リラックスタイム", "多趣味な日常", "映画鑑賞"] },
         { name: "専門的ソフトスキル", items: ["UI/UX改善", "ユーザー理解", "課題解決能力", "ロジカルシンキング", "プロジェクト管理", "ドキュメント作成", "プレゼンテーション", "チーム連携", "分析的思考", "交渉力"] },
         { name: "価値観・マインドセット", items: ["誠実な貢献", "自律的な行動", "高い好奇心", "柔軟な思考", "改善マインド", "プロフェッショナリズム", "本質志向", "持続可能な成長", "知的な探求", "継続力"] },
-        { name: "2026年と未来への展望", items: ["目標の達成", "スキルの成熟", "豊かな人生の構築", "安定と挑戦の両立", "新しいコミュニティ", "影響力の拡大", "幸福の追求", "未来の自分への投資", "次なるマイルストーン", "社会貢献", "新たなステージ"] }
+        { name: "未来への展望", items: ["目標の達成", "スキルの成熟", "豊かな人生の構築", "安定と挑戦の両立", "新しいコミュニティ", "影響力の拡大", "幸福の追求", "未来の自分への投資", "次なるマイルストーン", "社会貢献", "新たなステージ"] }
       ]
     };
 
-    const nodes = [];
+    const nodes = [{ id: "root", name: dataSet.main, val: 120, level: 0, color: "#ffffff" }];
     const links = [];
-    const colors = ["#ff5f5f", "#5fff5f", "#5f5fff", "#ffff5f", "#ff5fff", "#5fffff", "#ffaf5f", "#af5fff", "#5fffaf", "#ff5faf"];
+    const colors = ["#FF3366", "#33FF99", "#3366FF", "#FFCC33", "#FF66FF", "#33FFFF", "#FFA500", "#9966FF", "#CCFF33", "#FF4500"];
 
-    // 1. mainノード（サイズ特大）
-    nodes.push({ id: "root", name: dataSet.main, val: 200, level: 0, color: "#ffffff" });
-
-    // 2. カテゴリーとアイテムの追加
     dataSet.categories.forEach((cat, gIdx) => {
       const catId = `cat-${gIdx}`;
       const groupColor = colors[gIdx % colors.length];
-      
-      // カテゴリーノード（サイズ大）
-      nodes.push({ id: catId, name: cat.name, val: 80, level: 1, color: groupColor });
+      nodes.push({ id: catId, name: cat.name, val: 60, level: 1, color: groupColor });
       links.push({ source: "root", target: catId });
 
-      // アイテムノード（サイズ小）
       cat.items.forEach((item, iIdx) => {
         const itemId = `item-${gIdx}-${iIdx}`;
         nodes.push({ id: itemId, name: item, val: 15, level: 2, color: groupColor });
@@ -67,67 +47,59 @@
       });
     });
 
-    // --- HTMLラベルの準備 ---
-    const labelsContainer = document.getElementById('labels-container');
-    const labelElements = {};
-
-    nodes.forEach(node => {
-      // main(0)とカテゴリー(1)の時だけHTMLのdivタグを作成
-      if (node.level < 2) {
-        const div = document.createElement('div');
-        div.className = `node-label ${node.level === 0 ? 'label-main' : 'label-cat'}`;
-        div.innerText = node.name;
-        if (node.level === 1) div.style.color = node.color; // カテゴリはノードと同色
-        labelsContainer.appendChild(div);
-        labelElements[node.id] = div;
-      }
-    });
-
-    // --- グラフの描画 ---
     const Graph = ForceGraph3D()(document.getElementById('3d-graph'))
       .graphData({ nodes, links })
+      .nodeColor('color')
       .nodeVal('val')
-      .nodeColor(node => node.level === 2 ? `${node.color}55` : node.color) // 末端は少し透明に
-      .nodeLabel(node => node.level === 2 ? node.name : '') // 末端ノードのみホバーで名前表示
+      .nodeOpacity(1)
+      .linkOpacity(0.1)
       .backgroundColor('#010101')
-      .linkOpacity(0.3)
-      .linkWidth(0.5)
-      // ドラッグ終了時にその座標(fx, fy, fz)を固定する設定
-      .onNodeDragEnd(node => {
-        node.fx = node.x;
-        node.fy = node.y;
-        node.fz = node.z;
+      .showNavInfo(false)
+      // 文字をノードの横に常に表示（Canvas方式でエラー回避）
+      .nodeThreeObject(node => {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        const text = node.name;
+        const fontSize = node.level === 0 ? 32 : (node.level === 1 ? 24 : 16);
+        context.font = `${fontSize}px sans-serif`;
+        const textWidth = context.measureText(text).width;
+
+        canvas.width = textWidth + 10;
+        canvas.height = fontSize + 10;
+        context.font = `${fontSize}px sans-serif`;
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillStyle = node.color;
+        // items(level 2) は少し透明にして主役（カテゴリ）を立てる
+        if (node.level === 2) context.globalAlpha = 0.7;
+        context.fillText(text, canvas.width / 2, canvas.height / 2);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+        const sprite = new THREE.Sprite(spriteMaterial);
+        sprite.scale.set(canvas.width / 10, canvas.height / 10, 1);
+        sprite.position.y = node.level === 0 ? 15 : (node.level === 1 ? 10 : 6);
+        return sprite;
+      })
+      .nodeThreeObjectExtend(true)
+      // クリックしたらそこにズームする機能
+      .onNodeClick(node => {
+        const distance = 200;
+        const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
+        Graph.cameraPosition(
+          { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
+          node, 
+          1000  // 1秒かけてズーム
+        );
       });
 
-    // 広がり方の設定
-    Graph.d3Force('charge').strength(-350);
-    Graph.cameraPosition({ z: 600 });
+    // --- 物理エンジンの調整（並びを綺麗にする） ---
+    Graph.d3Force('charge').strength(-400); // 反発を強めて重なりを防ぐ
+    Graph.d3Force('link').distance(node => node.level === 0 ? 150 : 60); // 中心とカテゴリの距離を離す
 
-    // --- ラベルを3D空間の動きに追従させる処理 ---
-    function updateLabels() {
-      nodes.forEach(node => {
-        if (node.level < 2 && labelElements[node.id] && node.x !== undefined) {
-          // 3Dの座標を、画面上の2DのX・Y座標に変換
-          const coords = Graph.graph2ScreenCoords(node.x, node.y, node.z);
-          const el = labelElements[node.id];
-          
-          // カメラの裏側に回った時は文字を消す（めり込み防止）
-          if (coords.z < 0 || coords.z > 1) {
-            el.style.opacity = 0;
-          } else {
-            el.style.opacity = 1;
-            el.style.left = `${coords.x}px`;
-            // 球体の少し上に文字が来るようにY座標を調整
-            const yOffset = node.level === 0 ? 40 : 25;
-            el.style.top = `${coords.y - yOffset}px`;
-          }
-        }
-      });
-      requestAnimationFrame(updateLabels); // 毎フレーム更新
-    }
-    
-    // 追従処理スタート
-    requestAnimationFrame(updateLabels);
+    // 全キーワードを表示するため、少し引きの絵から開始
+    Graph.cameraPosition({ z: 900 });
+
   </script>
 </body>
 </html>
