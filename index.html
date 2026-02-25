@@ -6,25 +6,24 @@
   <script src="https://unpkg.com/3d-force-graph"></script>
   <style>
     body { margin: 0; background-color: #010101; overflow: hidden; font-family: "Helvetica Neue", Arial, sans-serif; }
-    #guide { position: absolute; bottom: 20px; width: 100%; text-align: center; color: rgba(255,255,255,0.5); pointer-events: none; font-size: 12px; z-index: 30; }
+    #guide { position: absolute; bottom: 20px; width: 100%; text-align: center; color: rgba(255,255,255,0.7); pointer-events: none; font-size: 14px; z-index: 30; font-weight: bold; }
     
-    /* 確実に表示されるHTMLテキストのスタイル */
     #labels-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
     .node-label {
       position: absolute;
       transform: translate(-50%, -50%);
       font-weight: bold;
-      text-shadow: 0px 0px 4px #000, 0px 0px 8px #000; /* 文字を読みやすくする黒フチ */
+      text-shadow: 0px 0px 4px #000, 0px 0px 8px #000;
       white-space: nowrap;
+      transition: opacity 0.3s ease; /* ふわっと消えるアニメーション */
     }
-    /* 階層ごとの文字サイズと透明度 */
     .label-level-0 { font-size: 36px; color: #ffffff; z-index: 3; }
-    .label-level-1 { font-size: 20px; z-index: 2; }
-    .label-level-2 { font-size: 12px; opacity: 0.7; z-index: 1; }
+    .label-level-1 { font-size: 20px; z-index: 2; cursor: pointer; }
+    .label-level-2 { font-size: 12px; z-index: 1; }
   </style>
 </head>
 <body>
-  <div id="guide">左クリックで回転 / 右クリックで並行移動 / ホイールでズーム / 球体クリックでフォーカス</div>
+  <div id="guide">カテゴリ(中サイズ)をクリックでフォーカス / 背景の黒い部分をクリックで全体表示に戻る</div>
   <div id="3d-graph"></div>
   <div id="labels-container"></div>
 
@@ -49,21 +48,20 @@
     const links = [];
     const colors = ["#FF3366", "#33FF99", "#3366FF", "#FFCC33", "#FF66FF", "#33FFFF", "#FFA500", "#9966FF", "#CCFF33", "#FF4500"];
 
-    // データからノードとリンクを作成
+    // データの構築（誰の子供かを判定できるように parentId を追加）
     dataSet.categories.forEach((cat, gIdx) => {
       const catId = `cat-${gIdx}`;
       const groupColor = colors[gIdx % colors.length];
-      nodes.push({ id: catId, name: cat.name, val: 60, level: 1, color: groupColor });
+      nodes.push({ id: catId, name: cat.name, val: 60, level: 1, color: groupColor, parentId: "root" });
       links.push({ source: "root", target: catId });
 
       cat.items.forEach((item, iIdx) => {
         const itemId = `item-${gIdx}-${iIdx}`;
-        nodes.push({ id: itemId, name: item, val: 15, level: 2, color: groupColor });
+        nodes.push({ id: itemId, name: item, val: 15, level: 2, color: groupColor, parentId: catId });
         links.push({ source: catId, target: itemId });
       });
     });
 
-    // --- HTMLテキストの生成（全101個） ---
     const labelsContainer = document.getElementById('labels-container');
     const labelElements = {};
 
@@ -71,12 +69,14 @@
       const div = document.createElement('div');
       div.className = `node-label label-level-${node.level}`;
       div.innerText = node.name;
-      if (node.level > 0) div.style.color = node.color; // カテゴリとアイテムに色をつける
+      if (node.level > 0) div.style.color = node.color;
       labelsContainer.appendChild(div);
       labelElements[node.id] = div;
     });
 
-    // --- 3Dグラフの描画 ---
+    // ★ 選択中のカテゴリを記憶する変数
+    let activeCategory = null;
+
     const Graph = ForceGraph3D()(document.getElementById('3d-graph'))
       .graphData({ nodes, links })
       .nodeColor('color')
@@ -85,39 +85,82 @@
       .linkOpacity(0.15)
       .backgroundColor('#010101')
       .showNavInfo(false)
-      // クリックズーム機能
+      
+      // ★ ノード（球体）をクリックした時の処理
       .onNodeClick(node => {
-        const distance = 200;
-        const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
-        Graph.cameraPosition(
-          { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
-          node, 1000
-        );
+        if (node.level === 1) { // カテゴリをクリックした場合のみ
+          activeCategory = node.id;
+          updateVisibility(); // 表示の切り替えを実行
+          
+          // クリックした場所にズーム
+          const distance = 180;
+          const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
+          Graph.cameraPosition(
+            { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
+            node, 1000
+          );
+        }
+      })
+      
+      // ★ 背景（何もない黒い部分）をクリックした時の処理
+      .onBackgroundClick(() => {
+        if (activeCategory !== null) {
+          activeCategory = null; // 選択状態を解除
+          updateVisibility(); // 全体表示に戻す
+          
+          // カメラを初期位置に戻す
+          Graph.cameraPosition({ x: 0, y: 0, z: 1000 }, { x: 0, y: 0, z: 0 }, 1000);
+        }
       });
 
-    // 距離の調整（中心は遠く、カテゴリの周りは近くに配置）
     Graph.d3Force('charge').strength(-400);
     Graph.d3Force('link').distance(link => {
-      // link.sourceがroot(中心)の場合は距離を150、それ以外(カテゴリ→アイテム)は60
       return link.source.id === "root" || link.source === "root" ? 150 : 60;
     });
-    
-    // 初期カメラ位置
     Graph.cameraPosition({ z: 1000 });
 
-    // --- 文字を球体に追従させる処理 ---
+    // ★ 表示・非表示を切り替える関数
+    function updateVisibility() {
+      // 球体の表示制御
+      Graph.nodeVisibility(node => {
+        if (!activeCategory) return true; // 何も選択していなければ全部表示
+        // 中心(root)、選択したカテゴリ、そのカテゴリのアイテムだけを表示
+        return node.id === "root" || node.id === activeCategory || node.parentId === activeCategory;
+      });
+      
+      // 線の表示制御
+      Graph.linkVisibility(link => {
+        if (!activeCategory) return true;
+        const sourceId = link.source.id || link.source;
+        const targetId = link.target.id || link.target;
+        // 中心から選択カテゴリへの線、選択カテゴリからアイテムへの線だけを表示
+        return (sourceId === "root" && targetId === activeCategory) || (sourceId === activeCategory);
+      });
+    }
+
+    // 文字ラベルの追従と表示制御
     function updateLabels() {
       nodes.forEach(node => {
         const el = labelElements[node.id];
         if (el && node.x !== undefined) {
+          
+          // ★ 文字の表示・非表示判定
+          let isVisible = true;
+          if (activeCategory) {
+            if (node.id !== "root" && node.id !== activeCategory && node.parentId !== activeCategory) {
+              isVisible = false;
+            }
+          }
+
           const coords = Graph.graph2ScreenCoords(node.x, node.y, node.z);
-          // カメラの裏に回ったら文字を隠す
-          if (coords.z < 0 || coords.z > 1) {
-            el.style.display = 'none';
+          // カメラの裏側に行ったか、非表示対象の場合は透明にする
+          if (!isVisible || coords.z < 0 || coords.z > 1) {
+            el.style.opacity = 0;
+            el.style.pointerEvents = 'none';
           } else {
-            el.style.display = 'block';
+            el.style.opacity = node.level === 2 ? 0.8 : 1; // itemsは少し透明に
+            el.style.pointerEvents = 'auto';
             el.style.left = `${coords.x}px`;
-            // 球体のサイズに合わせて文字を上にずらす
             const yOffset = node.level === 0 ? 40 : (node.level === 1 ? 25 : 12);
             el.style.top = `${coords.y - yOffset}px`;
           }
