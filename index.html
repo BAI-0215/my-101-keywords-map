@@ -24,8 +24,10 @@
     .label-level-1 { font-size: 20px; z-index: 2; cursor: pointer; } 
     /* itemsの文字色を白に指定 */
     .label-level-2 { font-size: 14px; z-index: 1; color: #ffffff; cursor: pointer; } 
-    /* ★ 修正3: itemsの文字にホバーした際に拡大するスタイルを追加 */
-    .label-level-2:not(.item-centered):hover { transform: translate(-50%, -50%) scale(1.6); z-index: 15; }
+    
+    /* ★ 修正: itemsの文字または球体にホバーした際に拡大するスタイルを追加 */
+    .label-level-2:not(.item-centered):hover,
+    .label-level-2:not(.item-centered).hovered { transform: translate(-50%, -50%) scale(1.6); z-index: 15; }
 
     /* itemsページ（3ページ目）用のスタイル追加 */
     #item-overlay {
@@ -124,6 +126,7 @@
     let baseAngle = 0;
     let isCanvasNodeHovered = false; // 3D球体上のホバー状態
     let isLabelHovered = false;      // 文字(HTML)上のホバー状態
+    let hoveredNodeId = null;        // ★ 追加: 現在ホバーされている球体のノードID
 
     // ★ items（3ページ目）展開処理
     function focusOnItem(node) {
@@ -256,9 +259,10 @@
       // ★ 新規追加: アニメーションを永続化（エラーの原因であった再起動処理を排除するため）
       .d3AlphaDecay(0)
 
-      // ★ 新規追加: 3D球体上のマウスホバーで回転を停止させる
+      // ★ 新規追加: 3D球体上のマウスホバーで回転を停止させる・球体のホバー状態を保存する
       .onNodeHover(node => {
         isCanvasNodeHovered = !!node; // nodeが存在すればtrue、なければfalse
+        hoveredNodeId = node ? node.id : null; // ★ 追加: どの球体にホバーしているかを保存
       })
       
       // ★ 球体をクリックした時も共通処理を呼ぶ
@@ -392,8 +396,24 @@
             el.style.opacity = 1; 
             el.style.pointerEvents = 'auto'; // クリック判定を有効にする
             el.style.left = `${coords.x}px`;
-            const yOffset = node.level === 0 ? 40 : (node.level === 1 ? 25 : 12);
+            
+            // ★ 修正: 2ページ目の展開中カテゴリ (activeCategory) は文字を球体の中央(yOffset=0)に配置する
+            let yOffset = 0;
+            if (node.level === 0) {
+              yOffset = 40;
+            } else if (node.level === 1) {
+              yOffset = (activeCategory === node.id) ? 0 : 25;
+            } else if (node.level === 2) {
+              yOffset = 12;
+            }
             el.style.top = `${coords.y - yOffset}px`;
+
+            // ★ 追加: 球体にホバーしている時も文字を拡大するためのクラス付与
+            if (hoveredNodeId === node.id && node.level === 2) {
+              el.classList.add('hovered');
+            } else {
+              el.classList.remove('hovered');
+            }
           }
         }
       });
